@@ -69,6 +69,7 @@ except Exception as e:
 
 _fits: dict[str, Any] = {}
 _fit_meta: dict[str, dict] = {}
+_prev_direction: dict[str, str] = {}
 _start_time = time.time()
 _training = False
 _train_task: asyncio.Task | None = None
@@ -107,12 +108,18 @@ def _train_symbol(symbol: str) -> dict:
         result = run_once(cfg)
         if result.get("status") == "ok" and result.get("fit"):
             _fits[symbol] = result["fit"]
+            new_dir = result.get("direction")
+            prev_dir = _prev_direction.get(symbol)
+            _prev_direction[symbol] = new_dir
             _fit_meta[symbol] = {
                 "trained_at": result.get("ts"),
-                "direction": result.get("direction"),
+                "direction": new_dir,
                 "p_up": float(result.get("p_up", 0)),
                 "confidence": float(result.get("confidence", 0)),
                 "strong": result.get("strong"),
+                "price": result.get("price"),
+                "last_train_ts": time.time(),
+                "direction_changed": prev_dir is not None and new_dir != prev_dir,
             }
         return _sanitize(result)
     finally:
@@ -202,6 +209,23 @@ class SnipeRequest(BaseModel):
 @app.get("/health")
 def health():
     """Service health — responds immediately even during training."""
+    cfg = None
+    try:
+        if _import_ok:
+            cfg = _get_cfg(_get_symbols()[0])
+    except Exception:
+        pass
+
+    retrain_sec = (cfg.retrain_minutes * 60) if cfg else None
+    latest_train_ts = max(
+        (m.get("last_train_ts", 0) for m in _fit_meta.values()), default=0
+    )
+    next_retrain_ts = (
+        (latest_train_ts + retrain_sec)
+        if (latest_train_ts and retrain_sec)
+        else None
+    )
+
     return {
         "ok": _import_ok,
         "import_error": _import_error if not _import_ok else None,
@@ -214,11 +238,19 @@ def health():
                 "p_up": meta.get("p_up"),
                 "confidence": meta.get("confidence"),
                 "strong": meta.get("strong"),
+                "price": meta.get("price"),
+                "last_train_ts": meta.get("last_train_ts"),
+                "direction_changed": meta.get("direction_changed"),
             }
             for sym, meta in _fit_meta.items()
         },
         "symbols": _get_symbols(),
         "uptime_sec": round(time.time() - _start_time),
+        "retrain_minutes": cfg.retrain_minutes if cfg else None,
+        "confidence_threshold": cfg.confidence_threshold if cfg else None,
+        "granularity_seconds": cfg.granularity_seconds if cfg else None,
+        "last_train_ts": latest_train_ts or None,
+        "next_retrain_ts": next_retrain_ts,
     }
 
 
