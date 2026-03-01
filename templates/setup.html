@@ -1,0 +1,413 @@
+{% extends "base.html" %}
+{% block body %}
+  <div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <h1>{{ product }}</h1>
+      <div class="sub">first run setup</div>
+    </div>
+  </div>
+
+  <div class="card mw-720">
+    <div class="hd">
+      <h2>Setup Wizard</h2>
+      <span class="mono gold">no keys shipped</span>
+    </div>
+    <div class="bd">
+      {% if setup_error %}
+        <div class="notice warn mb-12">
+          <b>Setup input error:</b> {{ setup_error }}
+        </div>
+      {% endif %}
+      {% if needs_token %}
+        <div class="small">
+          This setup page is protected by a one-time token.
+          Copy it and open:
+          <div class="pill mt-10">
+            <b class="mono">/setup?token={{ setup_token }}</b>
+          </div>
+        </div>
+      {% else %}
+        <form method="post" action="/setup/save">
+          <input type="hidden" name="token" value="{{ setup_token }}" />
+
+          {# Step indicator #}
+          <div class="step-bar">
+            <div class="step-item">
+              <div class="step-dot active mono">1</div>
+              <div class="small mono step-label">ACCESS</div>
+            </div>
+            <div class="step-item">
+              <div class="step-dot mono">2</div>
+              <div class="small mono step-label">WALLET</div>
+            </div>
+            <div class="step-item">
+              <div class="step-dot mono">3</div>
+              <div class="small mono step-label">MODE</div>
+            </div>
+          </div>
+
+          {# ── STEP 1 ── #}
+          <div class="setup-section">
+            <div class="setup-heading">Step 1 — Dashboard access</div>
+            <label class="field-label">Password</label>
+            <input name="dashboard_password" placeholder="Choose a password" autocomplete="new-password" />
+            <label class="field-label">Trading pair</label>
+            <input name="symbol" value="{{ symbol }}" placeholder="e.g. BTC-USD" />
+          </div>
+
+          <div class="hr mt-14"></div>
+
+          {# ── STEP 2 ── #}
+          <div class="setup-section">
+            <div class="setup-heading">Step 2 — Connect Polymarket <span class="setup-optional">optional — skip for paper mode</span></div>
+            <div class="setup-text">
+              The bot can trade 15-minute BTC Up/Down markets on Polymarket automatically once you enable execution.
+              Paste your wallet key to connect. It stays on your server and is never sent anywhere.
+            </div>
+
+            <div class="setup-text mt-10">
+              <b>New:</b> the bot also has an optional <b>Arb-first</b> mode (high-confidence). It tries to buy <b>both</b> sides
+              only when the orderbook briefly makes the combined cost less than <b>$1.00</b>. You can enable it later in the dashboard.
+            </div>
+
+            <div class="notice warn mb-12">
+              <div>
+                <b>Heads up:</b> you need a little <b>Polygon gas token</b> (often called MATIC; newer docs may call it POL)
+                in this same wallet. Without gas, trades can fail and <b>winnings can’t be redeemed</b>.
+                <br />
+                <span class="muted">Recommended: keep at least <b>1</b> gas token in the wallet.</span>
+              </div>
+              <span class="badge">gas</span>
+            </div>
+
+            <label class="field-label">Wallet private key</label>
+            <input name="private_key" id="private_key" placeholder="0x..." autocomplete="off" />
+
+            <label class="field-label">How did you create your Polymarket account?</label>
+            <div class="wallet-type-group mt-10">
+              <label class="wallet-type-option">
+                <input type="radio" name="wallet_type" value="metamask" checked onchange="toggleFunder()" />
+                <span><b>MetaMask / browser wallet</b></span>
+                <span class="field-hint" style="margin:0">Connected MetaMask, Rabby, Coinbase Wallet, etc.</span>
+              </label>
+              <label class="wallet-type-option">
+                <input type="radio" name="wallet_type" value="email_google" onchange="toggleFunder()" />
+                <span><b>Email or Google</b></span>
+                <span class="field-hint" style="margin:0">Signed up with email address or Google account</span>
+              </label>
+              <label class="wallet-type-option">
+                <input type="radio" name="wallet_type" value="metamask_proxy" onchange="toggleFunder()" />
+                <span><b>MetaMask (different address on Polymarket)</b></span>
+                <span class="field-hint" style="margin:0">Your Polymarket profile shows a different 0x address than your MetaMask</span>
+              </label>
+            </div>
+
+            <div id="funder-section" style="display:none">
+              <div class="notice warn mb-12 mt-10">
+                <div>
+                  <b>Email/Google accounts need one extra step.</b>
+                  Polymarket creates a <b>smart-contract wallet</b> (your "proxy" address) that is different from
+                  the private key you export. The bot needs both to sign orders correctly.
+                </div>
+              </div>
+              <label class="field-label">Funder address (your Polymarket proxy wallet)</label>
+              <input name="funder_address" id="funder_address" placeholder="0x..." autocomplete="off" />
+              <div class="field-hint">
+                This is the address shown on your Polymarket profile page (top-right → click your avatar → copy the 0x address).
+                It is <b>not</b> the same as reveal.magic.link — that gives you the private key for the <em>underlying</em> EOA.
+              </div>
+            </div>
+
+            {# ── Auto-Detect Button ── #}
+            <div class="mt-10">
+              <button type="button" id="detect-btn" class="btn-secondary" onclick="detectWallet()">
+                🔍 Auto-Detect Wallet Type
+              </button>
+              <div id="detect-status" class="mt-10" style="display:none"></div>
+            </div>
+
+            <label class="field-label">Max spend per trade (USDC)</label>
+            <input name="max_usdc" placeholder="e.g. 5" value="" />
+            <div class="field-hint">How much the bot can spend on each 15-min trade. Polymarket has no minimum order size — you can set this as low as $1. Start small and increase later.</div>
+
+            <details class="mt-10">
+              <summary class="setup-details-toggle">Optional: auto top-up gas</summary>
+              <div class="setup-text mt-10">
+                If enabled, the bot can try to swap a small amount of USDC into the gas token when gas is low.
+                This helps prevent confusing "redeem failed" errors.
+              </div>
+              <label class="field-label">0x API key (optional)</label>
+              <input name="zerox_api_key" placeholder="Paste your 0x API key" autocomplete="off" />
+              <div class="field-hint">
+                Needed for in-app swaps. Create one at <a href="https://dashboard.0x.org/" target="_blank" rel="noopener">dashboard.0x.org</a>.
+              </div>
+              <div class="two mt-10">
+                <div>
+                  <label class="field-label">Keep gas at</label>
+                  <input name="gas_target_native" placeholder="1.0" value="1.0" />
+                </div>
+                <div>
+                  <label class="field-label">Max spend (USDC)</label>
+                  <input name="gas_max_usdc" placeholder="5" value="5" />
+                </div>
+              </div>
+              <div class="row mt-10">
+                <input type="checkbox" name="gas_topup_enabled" value="true" id="gas_topup_enabled" />
+                <label for="gas_topup_enabled">Enable auto gas top-up</label>
+              </div>
+              <div class="field-hint">
+                This is best-effort and still needs a little existing gas to run. If gas is near-zero, you must manually send a small amount first.
+              </div>
+            </details>
+
+            <details class="mt-10">
+              <summary class="setup-details-toggle">How do I get my wallet key?</summary>
+              <div class="setup-text mt-10">
+                <ol>
+                  <li>Go to <a href="https://polymarket.com" target="_blank" rel="noopener">polymarket.com</a> and sign up / log in</li>
+                  <li>Export your key from <a href="https://reveal.magic.link/polymarket" target="_blank" rel="noopener">reveal.magic.link/polymarket</a></li>
+                  <li>Deposit <b>USDC</b> into that wallet on Polygon</li>
+                </ol>
+              </div>
+            </details>
+          </div>
+
+          <div class="hr mt-14"></div>
+
+          {# ── WITHDRAW ── #}
+          <div class="setup-section">
+            <div class="setup-heading">Withdraw address <span class="setup-optional">where profits go</span></div>
+            <div class="setup-text">
+              When you withdraw, the bot sends USDC from its trading wallet to this address.
+              Use your personal wallet (MetaMask, Coinbase Wallet, etc.) on <b>Polygon</b>.
+            </div>
+
+            <label class="field-label">Your personal wallet</label>
+            <input name="withdraw_to_address" placeholder="0x..." autocomplete="off" />
+
+            <label class="field-label">Max withdrawal per transaction (USDC)</label>
+            <input name="withdraw_max_usdc" placeholder="e.g. 100" value="" />
+            <div class="field-hint">Safety cap — you can always do multiple withdrawals.</div>
+          </div>
+
+          <div class="hr mt-14"></div>
+
+          {# ── STEP 3 ── #}
+          <div class="setup-section">
+            <div class="setup-heading">Step 3 — Start mode</div>
+            <div class="setup-text">
+              Start in <b>Paper</b> to watch the signal without risking money.
+              You can upgrade to live trading from the dashboard at any time.
+            </div>
+            <select name="start_mode" title="Start mode">
+              <option value="paper" selected>Paper — predictions only (safe)</option>
+              <option value="dry">Dry-run — finds markets, logs trades, no real orders</option>
+              <option value="live">Live — real orders on Polymarket (careful!)</option>
+            </select>
+          </div>
+
+          <button type="submit" class="mt-14">Save and start bot →</button>
+        </form>
+
+        <div class="hr mt-14"></div>
+
+        <div class="setup-text danger-box">
+          <b>⚠ Safety:</b> Use a dedicated trading wallet — don't paste the key for a wallet that holds your life savings.
+          All settings can be changed later from the dashboard.
+        </div>
+
+        <style>
+          .wallet-type-group {
+            display: flex; flex-direction: column; gap: 0.5rem;
+          }
+          .wallet-type-option {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.7rem;
+            padding: 0.65rem 0.9rem;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: border-color 0.15s;
+          }
+          .wallet-type-option:hover { border-color: var(--gold); }
+          .wallet-type-option input[type="radio"] {
+            accent-color: var(--gold); width: 16px; height: 16px; margin: 0;
+          }
+          .wallet-type-option .field-hint {
+            width: 100%; padding-left: 1.7rem; margin-top: -0.1rem;
+          }
+          .btn-secondary {
+            background: var(--panel);
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            padding: 0.55rem 1.2rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: background 0.15s, color 0.15s;
+          }
+          .btn-secondary:hover {
+            background: var(--gold);
+            color: var(--bg);
+          }
+          .btn-secondary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+          }
+          .detect-ok {
+            background: rgba(46,204,113,0.12);
+            border: 1px solid rgba(46,204,113,0.4);
+            border-radius: var(--radius-sm);
+            padding: 0.65rem 0.9rem;
+            color: #2ecc71;
+          }
+          .detect-warn {
+            background: rgba(241,196,15,0.12);
+            border: 1px solid rgba(241,196,15,0.4);
+            border-radius: var(--radius-sm);
+            padding: 0.65rem 0.9rem;
+            color: #f1c40f;
+          }
+          .detect-err {
+            background: rgba(231,76,60,0.12);
+            border: 1px solid rgba(231,76,60,0.4);
+            border-radius: var(--radius-sm);
+            padding: 0.65rem 0.9rem;
+            color: #e74c3c;
+          }
+        </style>
+
+        <script>
+          function toggleFunder() {
+            var el = document.getElementById('funder-section');
+            var radios = document.getElementsByName('wallet_type');
+            for (var i = 0; i < radios.length; i++) {
+              if (radios[i].checked && (radios[i].value === 'email_google' || radios[i].value === 'metamask_proxy')) {
+                el.style.display = 'block';
+                return;
+              }
+            }
+            el.style.display = 'none';
+          }
+
+          function detectWallet() {
+            var pk = document.getElementById('private_key').value.trim();
+            if (!pk) {
+              alert('Please enter your private key first.');
+              return;
+            }
+            var funder = document.getElementById('funder_address').value.trim();
+            var btn = document.getElementById('detect-btn');
+            var status = document.getElementById('detect-status');
+
+            btn.disabled = true;
+            btn.textContent = 'Detecting...';
+            status.style.display = 'none';
+
+            var fd = new FormData();
+            fd.append('private_key', pk);
+            fd.append('funder_address', funder);
+
+            fetch('/api/detect-wallet', { method: 'POST', body: fd })
+              .then(function(r) { return r.json(); })
+              .then(function(d) {
+                btn.disabled = false;
+                btn.textContent = '🔍 Auto-Detect Wallet Type';
+                status.style.display = 'block';
+                status.textContent = '';
+
+                if (d.ok) {
+                  status.className = 'mt-10 detect-ok';
+
+                  var h = document.createElement('b');
+                  h.textContent = 'Detected: ' + d.label;
+                  status.appendChild(h);
+
+                  var items = [
+                    ['CLOB Balance', '$' + parseFloat(d.balance).toFixed(2) + ' USDC'],
+                  ];
+                  if (typeof d.onchain_balance === 'number') {
+                    items.push(['On-chain USDC', '$' + parseFloat(d.onchain_balance).toFixed(2)]);
+                  }
+                  if (typeof d.position_count === 'number') {
+                    items.push(['Open Positions', '' + d.position_count]);
+                  }
+                  items.push(['EOA', d.address]);
+                  if (d.funder && d.funder.toLowerCase() !== d.address.toLowerCase()) {
+                    items.push(['Proxy wallet', d.funder]);
+                  }
+
+                  for (var i = 0; i < items.length; i++) {
+                    status.appendChild(document.createElement('br'));
+                    var lbl = document.createElement('b');
+                    lbl.textContent = items[i][0] + ': ';
+                    status.appendChild(lbl);
+                    var val = document.createElement('span');
+                    val.textContent = items[i][1];
+                    if (items[i][0] === 'EOA' || items[i][0] === 'Proxy wallet') {
+                      val.className = 'mono';
+                      val.style.fontSize = '0.8rem';
+                    }
+                    status.appendChild(val);
+                  }
+
+                  if (d.warning) {
+                    status.appendChild(document.createElement('br'));
+                    status.appendChild(document.createElement('br'));
+                    var warn = document.createElement('span');
+                    warn.style.color = '#f1c40f';
+                    warn.textContent = d.warning;
+                    status.appendChild(warn);
+                  }
+
+                  // Auto-select the correct radio
+                  var value = 'metamask';
+                  if (d.sig_type === 1) value = 'email_google';
+                  else if (d.sig_type === 2) value = 'metamask_proxy';
+
+                  var radios = document.getElementsByName('wallet_type');
+                  for (var j = 0; j < radios.length; j++) {
+                    radios[j].checked = (radios[j].value === value);
+                  }
+
+                  // Auto-fill funder if provided
+                  if (d.funder) {
+                    document.getElementById('funder_address').value = d.funder;
+                  }
+
+                  // Show/hide funder section
+                  toggleFunder();
+                } else {
+                  status.className = 'mt-10 detect-err';
+                  var errB = document.createElement('b');
+                  errB.textContent = d.error || 'Detection failed.';
+                  status.appendChild(errB);
+                  if (d.address) {
+                    status.appendChild(document.createElement('br'));
+                    var eoaLbl = document.createElement('b');
+                    eoaLbl.textContent = 'EOA: ';
+                    status.appendChild(eoaLbl);
+                    var eoaVal = document.createElement('span');
+                    eoaVal.className = 'mono';
+                    eoaVal.style.fontSize = '0.8rem';
+                    eoaVal.textContent = d.address;
+                    status.appendChild(eoaVal);
+                  }
+                }
+              })
+              .catch(function(err) {
+                btn.disabled = false;
+                btn.textContent = '🔍 Auto-Detect Wallet Type';
+                status.style.display = 'block';
+                status.className = 'mt-10 detect-err';
+                status.textContent = 'Error: ' + err.message;
+              });
+          }
+        </script>
+      {% endif %}
+    </div>
+  </div>
+  </div>
+{% endblock %}

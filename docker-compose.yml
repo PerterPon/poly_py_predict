@@ -1,0 +1,38 @@
+services:
+  crypto15min-predict:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crypto15min-predict
+    restart: unless-stopped
+    env_file:
+      - ./config/.env
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./config:/app/config
+    ports:
+      - "${C5_PREDICT_PORT:-8700}:8700"
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "predict_server:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8700",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8700/health').read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s

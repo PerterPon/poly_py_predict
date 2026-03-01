@@ -1,0 +1,196 @@
+<span id="trainingMarker" data-training="{% if state and state.get('status') == 'running' %}1{% else %}0{% endif %}" style="display:none"></span>
+{% if state and state.get('status') == 'ok' %}
+  {#
+    Determine the effective single-symbol state to display.
+    - If active_symbol is set: show only that symbol (hero view)
+    - If no active_symbol: show all symbols stacked (overview)
+  #}
+  {# ── Resolve display state ── #}
+  {# active_symbol is set when user clicks a symbol tab #}
+  {# state.direction is the signal for the active symbol (server pre-filtered) #}
+  {% set _d = state.get('direction', '') %}
+  {% set _conf = state.get('confidence', 0) | float %}
+  {% set _price = state.get('price', 0) | float %}
+  {% set _has_signal = _d and (_conf > 0 or _price > 0) %}
+  {% set _sym_label = active_symbol if active_symbol else state.get('symbol', cfg.symbol or '') %}
+
+  {% if _has_signal %}
+    {# ── Hero view — single symbol with live signal ── #}
+    <div class="signal-hero">
+      <div class="mono fs-11 muted mb-4">{{ _sym_label }}</div>
+      <div class="signal-dir mono {% if _d=='UP' %}up{% else %}down{% endif %}">
+        {% if _d=='UP' %}&#8593;{% else %}&#8595;{% endif %} {{ _d }}
+      </div>
+      {% if state.get('strong') %}
+        <div class="signal-sub"><span class="tag live">strong signal</span></div>
+      {% endif %}
+    </div>
+    <div class="kpi">
+      <div class="metric">
+        <div class="label">Confidence</div>
+        <div class="value mono">{{ '%.3f'|format(_conf) }}</div>
+      </div>
+      <div class="metric">
+        <div class="label">Price</div>
+        <div class="value mono gold" id="liveSpotPrice">${{ '%.2f'|format(_price) }}</div>
+      </div>
+    </div>
+    {% if state.get('window_slug') %}
+      <div class="small mt-10 signal-hero">window <span class="mono">{{ state.get('window_slug') }}</span></div>
+    {% endif %}
+
+  {% elif state.get('untrained') %}
+    {# Symbol selected but not trained yet — training was triggered #}
+    <div class="status-block">
+      <div class="status-icon">&#9203;</div>
+      <div class="small status-msg">Training model for <span class="mono">{{ _sym_label }}</span>…</div>
+    </div>
+
+  {% elif not _d %}
+    {# No signal yet — show placeholder #}
+    <div class="signal-hero">
+      <div class="mono fs-11 muted mb-4">{{ _sym_label }}</div>
+      <div class="signal-dir mono" style="color:rgba(255,255,255,0.3)">— waiting —</div>
+    </div>
+
+  {% else %}
+    {# Fallback single symbol #}
+    {% set d = state.get('direction','') %}
+    <div class="signal-hero">
+      <div class="signal-dir mono {% if d=='UP' %}up{% else %}down{% endif %}">
+        {% if d=='UP' %}&#8593;{% else %}&#8595;{% endif %} {{ d }}
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="metric">
+        <div class="label">Confidence</div>
+        <div class="value mono">{{ '%.3f'|format(state.get('confidence', 0)) }}</div>
+      </div>
+      <div class="metric">
+        <div class="label">Price</div>
+        <div class="value mono gold" id="liveSpotPrice">${{ '%.2f'|format(state.get('price', 0)) }}</div>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ── Model Retrain Cycle Indicator ── #}
+  {% set last_train_ts = state.get('last_train_ts', 0) | float %}
+  {% set retrain_mins  = state.get('retrain_minutes', 30) | int %}
+  {% if last_train_ts > 0 %}
+  <div class="learning-phase-bar retrain-bar" id="learningPhaseWrap">
+    <div class="learning-phase-top">
+      <div class="learning-phase-title">
+        <span class="lp-dot" id="lpDot"></span>
+        <span>Model Retrain Cycle</span>
+        <span class="tag warn tag-sm" id="lpTag" style="margin-left:6px">active</span>
+      </div>
+      <span class="mono fs-11 muted">
+        next retrain in <span id="lpCountdown" data-last="{{ last_train_ts|int }}" data-interval="{{ retrain_mins * 60 }}">…</span>
+      </span>
+    </div>
+    <div class="lp-track">
+      <div class="lp-fill" id="lpFill" style="width:0%"></div>
+    </div>
+    <div class="small muted mt-4">
+      Retraining every <span class="mono">{{ retrain_mins }}m</span>
+      · last at <span class="mono" id="lpLastTime" data-ts="{{ last_train_ts|int }}">…</span>
+      · <span id="lpStatus" class="mono">—</span>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Per-Asset Learning Phase Indicator ── #}
+  <div class="learning-phase-bar lp-learn-bar" id="learningPhaseLearnWrap" style="margin-top:10px;border-color:rgba(94,129,244,0.25);background:rgba(94,129,244,0.05);">
+    <div class="learning-phase-top">
+      <div class="learning-phase-title">
+        <span class="lp-dot" id="lpLearnDot" style="background:rgba(94,129,244,0.4);box-shadow:0 0 0 3px rgba(94,129,244,0.1);"></span>
+        <span>Per-Asset Learning</span>
+        <span class="tag tag-sm" id="lpLearnTag" style="margin-left:6px;background:rgba(94,129,244,0.15);color:rgba(94,129,244,0.9);border-color:rgba(94,129,244,0.3);">collecting data</span>
+      </div>
+      <span class="mono fs-11 muted" id="lpLearnProgress">loading…</span>
+    </div>
+    <div class="lp-track" style="margin-top:8px;">
+      <div class="lp-fill" id="lpLearnFill" style="width:0%;background:linear-gradient(90deg,rgba(94,129,244,0.7),rgba(94,129,244,1));"></div>
+    </div>
+    <div class="small muted mt-4" id="lpLearnDetail">Needs 12 resolved filled trades to suggest a confidence threshold.</div>
+  </div>
+
+  <div class="small mt-12">
+    Threshold <span class="mono">{{ cfg.confidence_threshold }}</span> · from Coinbase {{ (cfg.granularity_seconds // 60) | int }}-min candles
+    {% if state.get('ts') %}
+      · updated <span id="signalAge" class="mono" data-ts="{{ state.get('ts')|int }}" title="{{ state.get('ts') }}">…</span>
+    {% endif %}
+  </div>
+
+  {% if state.get('polymarket') %}
+    {% set pm = state.get('polymarket') %}
+    <div class="small mt-10">
+      Polymarket:
+      {% if pm.get('dry_run') %}<span class="tag warn tag-sm">dry-run</span>{% else %}<span class="tag live tag-sm">live</span>{% endif %}
+      {% if pm.get('placed') %}
+        &middot; <span class="mono">order placed</span>
+        {% if pm.get('direction') %}
+          &middot; <span class="mono">{{ pm.get('direction') }}</span>
+        {% endif %}
+        {% if pm.get('arb') %}
+          {% if pm.get('arb_sum_asks') %}
+            &middot; sum asks <span class="mono">{{ '%.4f'|format(pm.get('arb_sum_asks')|float) }}</span>
+          {% endif %}
+          {% if pm.get('arb_edge_per_share') %}
+            &middot; edge <span class="mono">{{ '%.4f'|format(pm.get('arb_edge_per_share')|float) }}</span>
+          {% endif %}
+        {% endif %}
+      {% elif pm.get('skipped') %}
+        &middot; <span class="mono">skipped</span>{% if pm.get('reason') %} ({{ pm.get('reason') }}){% endif %}
+        {% if pm.get('arb_diag') %}
+          {% set ad = pm.get('arb_diag') %}
+          {% if ad.get('sum_asks') %}
+            &middot; sum asks <span class="mono">{{ '%.4f'|format(ad.get('sum_asks')|float) }}</span>
+          {% endif %}
+          {% if ad.get('edge_per_share') %}
+            &middot; edge <span class="mono">{{ '%.4f'|format(ad.get('edge_per_share')|float) }}</span>
+          {% endif %}
+        {% endif %}
+      {% endif %}
+      {% if pm.get('window_slug') %}
+        &middot; <span class="mono tag-sm">{{ pm.get('window_slug') }}</span>
+      {% endif %}
+
+      {% if pm.get('market_quality') %}
+        {% set mq = pm.get('market_quality') %}
+        {% if mq.get('spread_bps') is not none %}
+          &middot; spread <span class="mono">{{ '%.2f'|format(mq.get('spread_bps')|float) }}bps</span>
+        {% endif %}
+        {% if mq.get('depth_usdc') is not none %}
+          &middot; depth <span class="mono">${{ '%.0f'|format(mq.get('depth_usdc')|float) }}</span>
+        {% endif %}
+      {% endif %}
+    </div>
+  {% endif %}
+{% elif state and state.get('status') == 'not_enough_data' %}
+  <div class="status-block">
+    <div class="status-icon">&#128200;</div>
+    <div class="small status-msg">Fetching candles for <span class="mono">{{ cfg.symbol }}</span>…</div>
+  </div>
+{% elif state and state.get('status') == 'paused' %}
+  <div class="status-block">
+    <div class="status-icon">&#9208;&#65039;</div>
+    <div class="small status-msg">Bot is stopped. Click <span class="mono">start</span> above to resume.</div>
+  </div>
+{% elif state and state.get('status') == 'resuming' %}
+  <div class="status-block">
+    <div class="status-icon">&#9654;&#65039;</div>
+    <div class="small status-msg">Resuming&#8230; fetching candles and recalculating.</div>
+  </div>
+{% elif state and state.get('status') == 'running' %}
+  <div class="status-block">
+    <div class="status-icon">&#9203;</div>
+    <div class="small status-msg">Running&#8230; fetching candles for <span class="mono">{{ cfg.symbol }}</span>.</div>
+  </div>
+{% elif state and state.get('status') == 'error' %}
+  <div class="small danger">Error: {{ state.get('error') }}</div>
+{% else %}
+  <div class="status-block">
+    <div class="small">Waiting for first prediction&#8230;</div>
+  </div>
+{% endif %}

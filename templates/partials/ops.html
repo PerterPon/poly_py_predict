@@ -1,0 +1,213 @@
+{# Ops & Logs panel (server-rendered partial, HTMX-polled) #}
+
+<div class="card">
+  <div class="hd">
+    <h2>Ops &amp; Logs</h2>
+    <div class="hd-badge mono">updated: {{ updated_ts or '—' }}</div>
+  </div>
+  <div class="bd small">
+    Live view of recent background operations (redeem, reconcile, settle, sell, cancels). Refreshes automatically.
+  </div>
+</div>
+
+<div class="grid-2 mt-12">
+  <div class="card">
+    <div class="hd">
+      <h2>Auto-redeem</h2>
+      <div class="hd-badge mono">
+        {% if auto_redeem_enabled %}
+          <span class="tag live tag-sm">enabled</span>
+        {% else %}
+          <span class="tag off tag-sm">disabled</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="bd">
+      {% if auto_redeem_enabled and (not polymarket_mode_enabled) %}
+        <div class="notice warn mb-12">
+          <div>
+            <b>Auto-redeem won’t run yet.</b><br />
+            Trading mode appears OFF, so the background loop won’t attempt on-chain redemption.
+          </div>
+          <span class="badge">mode</span>
+        </div>
+      {% endif %}
+
+      <div class="small">
+        <div><b>Last auto-redeem run</b></div>
+        {% if redeem and redeem is mapping %}
+          <div class="mono mt-6">
+            ok: <b>{{ redeem.get('ok') }}</b><br />
+            skipped: {{ redeem.get('skipped') }}{% if redeem.get('reason') %} ({{ redeem.get('reason') }}){% endif %}<br />
+            dry_run: {{ redeem.get('dry_run') }}<br />
+            candidates: {{ redeem.get('candidates') }} | submitted: {{ redeem.get('submitted') }} | planned: {{ redeem.get('planned') }}
+          </div>
+        {% else %}
+          <div class="muted mt-6">No auto-redeem status yet (wait a minute).</div>
+        {% endif %}
+
+        <div class="mt-14"><b>Last reconcile</b></div>
+        {% if redeem_reconcile and redeem_reconcile is mapping %}
+          <div class="mono mt-6">
+            ok: <b>{{ redeem_reconcile.get('ok') }}</b><br />
+            checked: {{ redeem_reconcile.get('checked') }} | updated: {{ redeem_reconcile.get('updated') }} | pending: {{ redeem_reconcile.get('pending') }}
+          </div>
+        {% else %}
+          <div class="muted mt-6">No reconcile status yet.</div>
+        {% endif %}
+
+        <div class="mt-14"><b>What “working” looks like</b></div>
+        <ul class="mt-6">
+          <li>Events appear with action <span class="mono">redeem_positions</span> and later <span class="mono">redeem_reconcile</span>.</li>
+          <li>Trades show <span class="tag live tag-sm">redeeming</span> then <span class="tag live tag-sm">redeemed</span> when a win is claimed.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hd">
+      <h2>Recent ops events</h2>
+      <div class="hd-badge">showing last {{ events_limit or 0 }}</div>
+    </div>
+
+    <div class="bd">
+      {% if (events is not none) and (events|length > 0) %}
+        <div class="ops-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="nowrap">time</th>
+                <th>action</th>
+                <th class="nowrap">status</th>
+                <th>summary</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in events %}
+                <tr>
+                  <td class="mono nowrap">{{ e.get('ts','—') }}</td>
+                  <td class="mono">{{ e.get('action','—') }}</td>
+                  <td class="nowrap">
+                    {% if e.get('ok') is sameas true %}
+                      <span class="tag live tag-sm">ok</span>
+                    {% elif e.get('ok') is sameas false %}
+                      <span class="tag danger tag-sm">fail</span>
+                    {% else %}
+                      <span class="tag tag-sm">—</span>
+                    {% endif %}
+                  </td>
+                  <td class="muted">{{ e.get('summary','') }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="small mt-10">Source: <span class="mono">logs/poly_ops.json</span></div>
+      {% else %}
+        <div class="muted">No ops events yet. Once the bot runs background tasks, entries will appear here.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card mt-12">
+  <div class="hd">
+    <h2>Early Exit Monitor</h2>
+    <div class="hd-badge">
+      {% if ee_enabled %}
+        <span class="tag live tag-sm">enabled</span>
+        <span class="mono fs-11 muted" style="margin-left:6px;">Trail {{ ee_trail_pct }}% · Arm +{{ ee_trail_act_pct }}% · SL -{{ ee_sl_pct }}%</span>
+      {% else %}
+        <span class="tag off tag-sm">disabled</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="bd">
+
+    {% if not ee_enabled %}
+      <div class="muted small">Early exit is disabled. Enable it in the sidebar under Early Exit settings.</div>
+    {% else %}
+
+      <div class="small mb-10"><b>Positions being monitored</b> (filled, unresolved — checked every ~30s)</div>
+      {% if ee_open %}
+        <table>
+          <thead>
+            <tr>
+              <th>placed</th>
+              <th>dir</th>
+              <th>entry</th>
+              <th>shares</th>
+              <th>peak</th>
+              <th>trail stop</th>
+              <th class="down">SL floor</th>
+              <th>status</th>
+              <th>window</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in ee_open %}
+              <tr>
+                <td class="mono nowrap">{{ p.placed_ts }}</td>
+                <td class="mono {% if p.direction == 'UP' %}up{% else %}down{% endif %}">{{ p.direction }}</td>
+                <td class="mono">${{ p.entry }}</td>
+                <td class="mono">{{ p.shares }}</td>
+                <td class="mono up">${{ p.peak }}</td>
+                <td class="mono">{% if p.trail_active %}${{ p.trail_stop }}{% else %}—{% endif %}</td>
+                <td class="mono down">${{ p.sl_floor }}</td>
+                <td class="small muted">{% if p.trail_active %}<span class="up">trail armed</span>{% else %}watching · needs +{{ p.trail_act_pct }}%{% endif %}</td>
+                <td class="mono clip font-11">{{ p.slug }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="muted small">No open positions to monitor right now. Once a trade fills and is unresolved, it will appear here.</div>
+      {% endif %}
+
+      <div class="small mt-14 mb-10"><b>Early exit history</b> (last 20)</div>
+      {% if ee_history %}
+        <table>
+          <thead>
+            <tr>
+              <th>time</th>
+              <th>dir</th>
+              <th>trigger</th>
+              <th>entry</th>
+              <th>exit bid</th>
+              <th>P&L</th>
+              <th>window</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in ee_history %}
+              <tr>
+                <td class="mono nowrap">{{ h.ts }}</td>
+                <td class="mono {% if h.direction == 'UP' %}up{% else %}down{% endif %}">{{ h.direction }}</td>
+                <td>
+                  {% if h.trigger == 'take_profit' %}
+                    <span class="tag live tag-sm">TP exit</span>
+                  {% else %}
+                    <span class="tag warn tag-sm">SL exit</span>
+                  {% endif %}
+                </td>
+                <td class="mono">${{ h.entry }}</td>
+                <td class="mono">${{ h.bid }}</td>
+                <td class="mono {% if h.pnl_pct is not none and h.pnl_pct >= 0 %}up{% else %}down{% endif %}">
+                  {% if h.pnl_pct is not none %}
+                    {% if h.pnl_pct >= 0 %}+{% endif %}{{ h.pnl_pct }}%
+                  {% else %}—{% endif %}
+                </td>
+                <td class="mono clip font-11">{{ h.slug }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="muted small">No early exits yet. They will appear here when a TP or SL threshold is hit.</div>
+      {% endif %}
+
+    {% endif %}
+  </div>
+</div>

@@ -1,0 +1,69 @@
+{# ── P&L Summary Cards ── #}
+<div class="kpi section-gap">
+  <div class="metric">
+    <div class="label">Realized P&L</div>
+    {% if pnl.total_realized is not none %}
+      <div class="value mono {% if pnl.total_realized >= 0 %}up{% else %}down{% endif %}">
+        {% if pnl.total_realized >= 0 %}+{% endif %}${{ '%.2f'|format(pnl.total_realized) }}
+      </div>
+      <div class="small mt-6">
+        {{ pnl.total_wins + pnl.total_losses }} filled trades
+      </div>
+    {% else %}
+      <div class="value mono muted">&mdash;</div>
+      <div class="small mt-6">no resolved trades yet</div>
+    {% endif %}
+  </div>
+
+  <div class="metric">
+    <div class="label">Unrealized P&L</div>
+    {% if pnl.unrealized is not none %}
+      <div class="value mono {% if pnl.unrealized >= 0 %}up{% else %}down{% endif %}">
+        {% if pnl.unrealized >= 0 %}+{% endif %}${{ '%.2f'|format(pnl.unrealized) }}
+      </div>
+      <div class="small mt-6">
+        {{ pnl.open_positions }} open · basis ${{ '%.2f'|format(pnl.cost_basis) }}
+      </div>
+    {% else %}
+      <div class="value mono muted">&mdash;</div>
+      <div class="small mt-6">no open positions</div>
+    {% endif %}
+  </div>
+
+  <div class="metric">
+    <div class="label">Win Rate</div>
+    {% if pnl.total_wins + pnl.total_losses > 0 %}
+      <div class="value mono {% if pnl.win_rate >= 50 %}up{% else %}down{% endif %}">{{ '%.1f'|format(pnl.win_rate) }}%</div>
+      <div class="small mt-6">
+        <span class="mono up">{{ pnl.total_wins }}W</span>
+        <span class="mono muted">/</span>
+        <span class="mono down">{{ pnl.total_losses }}L</span>
+      </div>
+    {% else %}
+      <div class="value mono muted">&mdash;</div>
+      <div class="small mt-6">no filled trades yet</div>
+    {% endif %}
+  </div>
+
+  <div class="metric">
+    <div class="label">Avg Win / Avg Loss</div>
+    {% if pnl.total_wins + pnl.total_losses > 0 %}
+      <div class="value">
+        <span class="mono up">{% if pnl.avg_win is not none %}+${{ '%.2f'|format(pnl.avg_win) }}{% else %}&mdash;{% endif %}</span>
+        <span class="mono muted"> / </span>
+        <span class="mono down">{% if pnl.avg_loss is not none %}-${{ '%.2f'|format(pnl.avg_loss) }}{% else %}&mdash;{% endif %}</span>
+      </div>
+      <div class="small mt-6">
+        {% if pnl.best_trade is not none %}
+          best <span class="mono up">+${{ '%.2f'|format(pnl.best_trade) }}</span>
+        {% endif %}
+        {% if pnl.worst_trade is not none %}
+          · worst <span class="mono down">-${{ '%.2f'|format(pnl.worst_trade) }}</span>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="value mono muted">&mdash;</div>
+      <div class="small mt-6">&nbsp;</div>
+    {% endif %}
+  </div>
+</div>

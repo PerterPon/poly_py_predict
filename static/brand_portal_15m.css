@@ -1,0 +1,219 @@
+/* ============================================================
+   Crypto15min PolyTrader — PORTAL THEME (v0.6.9)
+   Inspired by modern "portal" dashboards (deep blue / purple)
+   Keeps structural "15m SWING BOT" cues but changes look heavily.
+   ============================================================ */
+
+:root{
+  --p-bg0:#070a14;
+  --p-bg1:#0a1024;
+  --p-bg2:#0b1535;
+  --p-card:#0d1635cc;
+  --p-card2:#0b1229cc;
+  --p-border: rgba(120,155,255,.18);
+  --p-border2: rgba(167,110,255,.18);
+  --p-text: rgba(245,248,255,.90);
+  --p-muted: rgba(245,248,255,.62);
+  --p-accent: #7c3aed;      /* purple */
+  --p-accent2:#2563eb;      /* blue */
+  --p-accent3:#22c55e;      /* green */
+  --p-warn:#f59e0b;         /* amber */
+}
+
+/* Base */
+body.theme-15m{
+  color: var(--p-text);
+  background:
+    radial-gradient(1200px 700px at 12% 8%, rgba(124,58,237,.18), transparent 60%),
+    radial-gradient(900px 650px at 80% 5%, rgba(37,99,235,.18), transparent 62%),
+    radial-gradient(900px 650px at 60% 92%, rgba(34,197,94,.08), transparent 62%),
+    linear-gradient(180deg, var(--p-bg0), var(--p-bg1) 45%, var(--p-bg2));
+}
+
+/* Left rail (still visible, but portal styled) */
+body.theme-15m::before{
+  content:"";
+  position: fixed;
+  left:0; top:0; bottom:0;
+  width:10px;
+  background: linear-gradient(180deg, rgba(124,58,237,.9), rgba(37,99,235,.85));
+  box-shadow: 0 0 30px rgba(124,58,237,.25);
+  z-index: 9998;
+  pointer-events:none;
+}
+
+/* Ribbon */
+.theme-15m .bot-ribbon{
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+  display:flex;
+  align-items:center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(120,155,255,.20);
+  background: linear-gradient(90deg, rgba(124,58,237,.22), rgba(37,99,235,.16) 45%, rgba(0,0,0,0));
+  backdrop-filter: blur(10px);
+}
+.theme-15m .bot-ribbon .pill{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-weight: 800;
+  letter-spacing: .4px;
+  color: rgba(255,255,255,.92);
+  background: linear-gradient(135deg, rgba(124,58,237,.65), rgba(37,99,235,.55));
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 10px 40px rgba(124,58,237,.18);
+}
+.theme-15m .bot-ribbon .sub{
+  color: rgba(245,248,255,.70);
+  font-size: 12.5px;
+}
+
+/* Sidebar / nav (best-effort) */
+body.theme-15m :is(aside, nav, .sidebar, .sidenav, .left, .panel-left){
+  background:
+    radial-gradient(600px 500px at 20% 10%, rgba(124,58,237,.20), transparent 60%),
+    radial-gradient(700px 600px at 60% 70%, rgba(37,99,235,.18), transparent 65%),
+    rgba(6,9,20,.72) !important;
+  border-right: 1px solid rgba(120,155,255,.20) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.theme-15m .sidebar .brand-badge{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(13,22,53,.65);
+  border: 1px solid rgba(120,155,255,.20);
+  color: rgba(245,248,255,.92);
+}
+
+/* Cards / panels */
+body.theme-15m :is(.card, .panel, .box, .tile, section, article, .content-card){
+  background: linear-gradient(180deg, var(--p-card), var(--p-card2)) !important;
+  border: 1px solid rgba(120,155,255,.14) !important;
+  box-shadow: 0 12px 60px rgba(0,0,0,.35);
+  border-radius: 18px;
+}
+body.theme-15m :is(.card, .panel, .box, .tile, section, article, .content-card)::before{
+  content:"";
+  position:absolute;
+  left:0; right:0; top:0;
+  height:3px;
+  background: linear-gradient(90deg, rgba(124,58,237,.85), rgba(37,99,235,.75), rgba(34,197,94,.45));
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  pointer-events:none;
+}
+
+/* Text */
+body.theme-15m h1, body.theme-15m h2, body.theme-15m h3{
+  color: rgba(245,248,255,.92);
+}
+body.theme-15m :is(.muted, .subtle, .hint){
+  color: var(--p-muted) !important;
+}
+
+/* Tabs: portal active */
+body.theme-15m :is(.tabs a, .tabs button, .tab, .nav a){
+  color: rgba(245,248,255,.70) !important;
+}
+body.theme-15m :is(.tabs a.active, .tabs .active, .tab.active, .nav a.active, .nav .active){
+  color: rgba(245,248,255,.95) !important;
+}
+body.theme-15m :is(.tabs a.active, .tab.active){
+  position: relative;
+}
+body.theme-15m :is(.tabs a.active, .tab.active)::after{
+  content:"";
+  position:absolute;
+  left: 0;
+  right: 0;
+  bottom: -10px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(124,58,237,.95), rgba(37,99,235,.85));
+}
+
+/* Buttons */
+body.theme-15m :is(button, .btn){
+  border-radius: 14px;
+  border: 1px solid rgba(120,155,255,.22);
+  background: rgba(13,22,53,.55);
+  color: rgba(245,248,255,.90);
+}
+body.theme-15m :is(button:hover, .btn:hover){
+  border-color: rgba(124,58,237,.40);
+  box-shadow: 0 10px 35px rgba(124,58,237,.16);
+}
+body.theme-15m :is(.btn-primary, button.primary){
+  border-color: rgba(124,58,237,.55) !important;
+  background: linear-gradient(135deg, rgba(124,58,237,.65), rgba(37,99,235,.55)) !important;
+}
+
+/* Inputs */
+body.theme-15m :is(input, select, textarea){
+  background: rgba(6,9,20,.45) !important;
+  color: rgba(245,248,255,.92) !important;
+  border: 1px solid rgba(120,155,255,.18) !important;
+  border-radius: 12px;
+}
+body.theme-15m :is(input:focus, select:focus, textarea:focus){
+  outline:none;
+  box-shadow: 0 0 0 3px rgba(124,58,237,.20);
+  border-color: rgba(124,58,237,.50) !important;
+}
+
+/* Watermark */
+body.theme-15m .main::before{
+  content: "SWING 15m";
+  position: fixed;
+  right: 22px;
+  bottom: 14px;
+  font-size: 120px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: rgba(124,58,237,.055);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Make "LIVE" style look different (best effort) */
+body.theme-15m :is(.live, .badge-live, .pill-live, .badge){
+  border-color: rgba(34,197,94,.45) !important;
+  box-shadow: 0 0 18px rgba(34,197,94,.12);
+}
+
+/* Fill probability badge (Liquidity Heat -> Likely/Risky/Skip) */
+body.theme-15m .fill-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: .2px;
+  border: 1px solid rgba(120,155,255,.18);
+  background: rgba(6,9,20,.35);
+  color: rgba(245,248,255,.92);
+}
+body.theme-15m .fill-badge::before{
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(148,163,184,.75);
+  box-shadow: 0 0 12px rgba(148,163,184,.25);
+}
+body.theme-15m .fill-good{border-color: rgba(34,197,94,.40); background: rgba(34,197,94,.10);}
+body.theme-15m .fill-good::before{background: rgba(34,197,94,.95); box-shadow: 0 0 14px rgba(34,197,94,.35);}
+body.theme-15m .fill-warn{border-color: rgba(245,158,11,.40); background: rgba(245,158,11,.10);}
+body.theme-15m .fill-warn::before{background: rgba(245,158,11,.95); box-shadow: 0 0 14px rgba(245,158,11,.30);}
+body.theme-15m .fill-bad{border-color: rgba(239,68,68,.40); background: rgba(239,68,68,.10);}
+body.theme-15m .fill-bad::before{background: rgba(239,68,68,.95); box-shadow: 0 0 14px rgba(239,68,68,.30);}
+body.theme-15m .fill-unk{opacity:.85;}

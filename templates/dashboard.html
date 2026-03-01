@@ -1,0 +1,2959 @@
+{% extends "base.html" %}
+{% block body %}
+  {# ── Derive display mode from backend ── #}
+  {% set dm = display_mode|default('paper') %}
+  {% set snap = snapshot|default(None) %}
+
+  {% if error_message %}
+    <div class="notice warn mb-12">
+      <b>Settings input error:</b> {{ error_message }}
+    </div>
+  {% endif %}
+
+  <div class="dashboard-layout">
+
+    <!-- ===== SIDEBAR ===== -->
+    <div class="sidebar">
+<div class="brand-badge">🟨 <span>15m SWING BOT</span></div>
+
+
+      <!-- Brand -->
+      <div class="sidebar-brand">
+        <div class="brand-icon">&#8383;</div>
+        <div>
+          <h2>{{ product }}</h2>
+          <div class="version">
+            {% if cfg.symbols and cfg.symbols|length > 1 %}
+              {{ cfg.symbols|map('replace', '-USD', '')|join(', ') }} &middot; 15 min
+            {% else %}
+              {{ cfg.symbol }} &middot; 15 min
+            {% endif %}
+            <span class="mode-badge {{ dm }}">{{ dm|upper }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bot Status -->
+      <div class="sidebar-status">
+        {% if state and state.get('status') == 'paused' %}
+          <span class="down fw-600">&#9208; Paused</span>
+        {% elif state and state.get('status') == 'ok' %}
+          <span class="up fw-600"><span class="live-dot on"></span> Running</span>
+        {% elif state and state.get('status') == 'running' %}
+          <span class="gold fw-600">&#9203; Training&hellip;</span>
+        {% else %}
+          <span>&#9203; Starting&hellip;</span>
+        {% endif %}
+      </div>
+
+      {% if snap %}
+        <div class="sidebar-status mt-6">
+          <div class="mono">wallet gas</div>
+          <div class="mono mt-6">
+            <span class="muted">{{ snap.get('native_gas_symbol','POL') }}</span>
+            <span class="{% if snap.get('native_gas_balance', 0) >= (native_gas_min|default(0.15)) %}up{% else %}danger{% endif %}">
+              {{ '%.4f'|format(snap.get('native_gas_balance', 0)) }}
+            </span>
+            {% if snap.get('native_gas_balance', 0) < (native_gas_min|default(0.15)) %}
+              <span class="tag warn tag-sm">low</span>
+            {% endif %}
+          </div>
+          <div class="muted mt-6">Low gas can break redeem/withdraw.</div>
+        </div>
+
+        {% if wallet_address %}
+        <div class="sidebar-status mt-6">
+          <div class="mono">bot wallet</div>
+          <div class="mono mt-6" style="font-size:0.72rem;word-break:break-all;">
+            <a href="https://polygonscan.com/address/{{ wallet_address }}" target="_blank" rel="noopener" title="View on Polygonscan" style="color:inherit;text-decoration:underline dotted;">{{ wallet_address }}</a>
+            <button type="button" onclick="navigator.clipboard.writeText('{{ wallet_address }}').then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='📋',1500)})" style="background:none;border:none;cursor:pointer;font-size:0.9rem;padding:2px 4px;" title="Copy address">📋</button>
+          </div>
+          <div class="muted mt-6">Send POL gas to this address.</div>
+        </div>
+        {% endif %}
+      {% endif %}
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-header">Wallet</div>
+        <form class="inline" method="get" action="/reconfigure">
+          <button class="btn-sidebar" type="submit">open wallet setup</button>
+        </form>
+        <div class="muted mt-6">Set private key, wallet type, and funder address.</div>
+      </div>
+
+      <!-- Bot Controls -->
+      <div class="sidebar-btns">
+        {% if state and state.get('status') == 'paused' %}
+          <form class="inline" method="post" action="/resume">
+            <button class="btn-sidebar start" type="submit">&#9654; Start</button>
+          </form>
+        {% else %}
+          <form class="inline" method="post" action="/pause">
+            <button class="btn-sidebar stop" type="submit">&#9632; Stop</button>
+          </form>
+        {% endif %}
+      </div>
+
+      <!-- Mode Switcher -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-header">Mode</div>
+        <div class="mode-switcher">
+          <form class="inline" method="post" action="/mode/paper" hx-post="/mode/paper" hx-swap="none">
+            <button class="mode-btn{% if dm == 'paper' %} active active-paper{% endif %}" type="submit">paper</button>
+          </form>
+          <form class="inline" method="post" action="/mode/dry" hx-post="/mode/dry" hx-swap="none">
+            <button class="mode-btn{% if dm == 'dry' %} active{% endif %}" type="submit">dry</button>
+          </form>
+          <form class="inline" method="post" action="/mode/live" hx-post="/mode/live" hx-swap="none">
+            <button class="mode-btn{% if dm == 'live' %} active active-live{% endif %}" type="submit">live</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Trading Settings -->
+      <form class="form-tight" method="post" action="/settings/polymarket">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Trading</div>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">Auto-trade</span>
+            <label class="toggle">
+              <input type="checkbox" name="enabled" value="true" aria-label="Auto-trade" {% if poly_cfg and poly_cfg.enabled %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">Dry-run</span>
+            <label class="toggle">
+              <input type="checkbox" name="dry_run" value="true" aria-label="Dry-run" {% if poly_cfg and poly_cfg.dry_run %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">Arb-first</span>
+            <label class="toggle" title="High-confidence mode: buys BOTH sides (UP + DOWN) only when the orderbook briefly makes it cheap enough.">
+              <input type="checkbox" name="arb_enabled" value="true" aria-label="Arb-first" {% if poly_cfg and poly_cfg.arb_enabled %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-field">
+            <label>Min edge (cents)</label>
+            <input name="arb_min_edge_cents" value="{{ poly_cfg.arb_min_edge_cents if poly_cfg else '1.0' }}" placeholder="e.g. 1.0" />
+            <div class="field-hint">
+              Only trade when UP ask + DOWN ask is at least this much below $1.00. Higher = fewer trades.
+            </div>
+          </div>
+
+          <details class="mt-6">
+            <summary class="small muted">Advanced arb buffers</summary>
+            <div class="config-field mt-6">
+              <label>Taker fee (bps)</label>
+              <input name="arb_taker_fee_bps" value="{{ poly_cfg.arb_taker_fee_bps if poly_cfg else '0' }}" placeholder="e.g. 0" />
+            </div>
+            <div class="config-field">
+              <label>Slippage buffer (bps)</label>
+              <input name="arb_slippage_bps" value="{{ poly_cfg.arb_slippage_bps if poly_cfg else '0' }}" placeholder="e.g. 0" />
+              <div class="field-hint">Extra safety margin. 10 bps = 0.10%.</div>
+            </div>
+          </details>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">Snipe mode</span>
+            <label class="toggle" title="Late-entry strategy: near window close, check if BTC already moved vs window open price. Higher accuracy when triggered.">
+              <input type="checkbox" name="snipe_enabled" value="true" aria-label="Snipe mode" {% if (overrides and overrides.get('C5_SNIPE_ENABLED') in ['true','True','1']) or (not overrides or not overrides.get('C5_SNIPE_ENABLED')) %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <details class="mt-6">
+            <summary class="small muted">Snipe settings</summary>
+            <div class="config-field mt-6">
+              <label>Lead seconds</label>
+              <input name="snipe_lead_seconds" value="{{ overrides.get('C5_SNIPE_LEAD_SECONDS', '10') if overrides else '10' }}" placeholder="e.g. 10" />
+              <div class="field-hint">How many seconds before window close to fire the snipe check.</div>
+            </div>
+            <div class="config-field">
+              <label>Min delta (%)</label>
+              <input name="snipe_min_delta" value="{{ overrides.get('C5_SNIPE_MIN_DELTA_PCT', '0.02') if overrides else '0.02' }}" placeholder="e.g. 0.02" />
+              <div class="field-hint">Minimum price move (%) to trigger. 0.02 = 0.02%.</div>
+            </div>
+            <div class="config-field">
+              <label>Snipe bet multiplier</label>
+              <input name="snipe_bet_multiplier" value="{{ overrides.get('C5_POLY_SNIPE_BET_MULTIPLIER', '2.0') if overrides else '2.0' }}" placeholder="e.g. 2.0" />
+              <div class="field-hint">Snipe trades are sized at this multiple of normal. 2.0 = double. Min 1.0.</div>
+            </div>
+          </details>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">Delta-first mode</span>
+            <label class="toggle" title="v0.5.0: Disable ML-only trades. Snipe at T-10s using live Chainlink delta becomes the sole entry mechanism. Validated by the most profitable open-source Polymarket bot.">
+              <input type="checkbox" name="delta_first" value="true" aria-label="Delta-first mode" {% if (overrides and overrides.get('C5_DELTA_FIRST') in ['true','True','1']) or (not overrides or not overrides.get('C5_DELTA_FIRST')) %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">Delta pricing</span>
+            <label class="toggle" title="Gate snipe trades by ask vs. delta tier ($0.52–$0.97). Skips if ask exceeds the tier for the observed delta (too expensive). Prevents overpaying on small moves.">
+              <input type="checkbox" name="delta_pricing" value="true" aria-label="Delta pricing" {% if (overrides and overrides.get('C5_DELTA_PRICING') in ['true','True','1']) or (not overrides or not overrides.get('C5_DELTA_PRICING')) %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">Auto-redeem</span>
+            <label class="toggle" title="After wins resolve, auto-claim collateral on-chain (Polygon). Costs gas.">
+              <input type="checkbox" name="auto_redeem" value="true" aria-label="Auto-redeem" {% if (not overrides) or ('C5_POLY_AUTO_REDEEM_ENABLED' not in overrides) or (overrides.get('C5_POLY_AUTO_REDEEM_ENABLED') in ['true','True','1']) %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="field-hint mt-6">
+            Auto-redeem is <b>ON by default</b>. It sends an on-chain transaction (Polygon) and costs gas.
+            Keep a little MATIC in the wallet. You can disable this anytime.
+          </div>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">Force GTC Orders</span>
+            <label class="toggle" title="Disables FOK safety. Places resting limit orders that may not fill immediately. Increases risk.">
+              <input type="checkbox" name="force_gtc" value="true" aria-label="Force GTC Orders" {% if overrides and (overrides.get('C5_POLY_FORCE_GTC') in ['true','True','1']) %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="field-hint mt-6">
+            <b>Warning:</b> Disables FOK (Fill-Or-Kill) safety. If liquidity is thin, your order will rest on the book and may fill at a bad time. Use only if you want to "continue with the risk" instead of skipping trades.
+          </div>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">High-risk</span>
+            <label class="toggle" title="Unlocks higher % sizing. Dangerous.">
+              <input type="checkbox" name="high_risk" value="true" aria-label="High-risk" {% if overrides and (overrides.get('C5_POLY_HIGH_RISK_MODE') in ['true','True','1']) %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">Expert/UNSAFE</span>
+            <label class="toggle" title="Unlocks up to 100% bet sizing. Extremely dangerous.">
+              <input type="checkbox" name="expert_mode" value="true" aria-label="Expert/UNSAFE" {% if overrides and (overrides.get('C5_POLY_EXPERT_MODE') in ['true','True','1']) %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-field">
+            <label>Confirm Expert</label>
+            <input name="expert_ack" value="" placeholder="Type: I UNDERSTAND" />
+            <div class="field-hint">
+              Required <b>once</b> to enable Expert mode. Matching is case-insensitive.
+              Expert removes the Bet% cap (up to 100%). You can blow up your account fast.
+            </div>
+          </div>
+
+          <div class="config-field">
+            <label>Max $ / trade</label>
+            <input name="max_usdc" value="{{ poly_cfg.max_usdc_per_trade if poly_cfg else '' }}" placeholder="e.g. 5" />
+          </div>
+
+          <div class="config-field">
+            <label>Bet mode</label>
+            <select name="bet_mode" title="Bet sizing mode">
+              <option value="fixed" {% if not poly_cfg or poly_cfg.bet_mode == 'fixed' %}selected{% endif %}>Fixed $</option>
+              <option value="percent" {% if poly_cfg and poly_cfg.bet_mode == 'percent' %}selected{% endif %}>% of bal</option>
+              <option value="kelly" {% if poly_cfg and poly_cfg.bet_mode == 'kelly' %}selected{% endif %}>Kelly (fractional)</option>
+            </select>
+          </div>
+
+          <div class="config-field">
+            <label>Kelly fraction (0.0–1.0)</label>
+            <input name="kelly_fraction" value="{{ poly_cfg.kelly_fraction if poly_cfg and poly_cfg.kelly_fraction is not none else ((overrides.get('C5_POLY_KELLY_FRACTION') if overrides else '') or '0.25') }}" placeholder="0.25" />
+            <div class="field-hint">
+              0.25 = <b>1/4 Kelly</b> (recommended). 0.5 is more aggressive. 0 disables Kelly sizing.
+            </div>
+          </div>
+
+          <div class="config-field">
+            <label>Bet %</label>
+            <input name="bet_percent" value="{{ poly_cfg.bet_percent if poly_cfg else '5' }}" placeholder="e.g. 5" />
+            <div class="field-hint">Capped at 10% (High-risk: 50%, Expert/UNSAFE: 100%).</div>
+          </div>
+
+          <details class="mt-6">
+            <summary class="small muted">Timing &amp; edge</summary>
+            <div class="config-field mt-6">
+              <label>Trade lead (seconds)</label>
+              <input name="trade_lead_seconds" value="{{ overrides.get('C5_POLY_TRADE_LEAD_SECONDS', '30') if overrides else '30' }}" placeholder="e.g. 30" />
+              <div class="field-hint">How many seconds before window close to place the ML trade.</div>
+            </div>
+            <div class="config-field">
+              <label>Cooldown (seconds)</label>
+              <input name="cooldown_seconds" value="{{ overrides.get('C5_POLY_COOLDOWN_SECONDS', '300') if overrides else '300' }}" placeholder="e.g. 300" />
+              <div class="field-hint">Min seconds between trades. 300 = one per window.</div>
+            </div>
+            <div class="config-field">
+              <label>Edge gate (0&ndash;1)</label>
+              <input name="edge_min" value="{{ overrides.get('C5_POLY_EDGE_MIN', '0.0') if overrides else '0.0' }}" placeholder="e.g. 0.02" />
+              <div class="field-hint">Min edge (model p &minus; market ask) required for ML trades. 0 = disabled. Snipe bypasses this.</div>
+            </div>
+
+            <div class="config-field">
+              <label>Ask source</label>
+              {% set am = (overrides.get('C5_POLY_ASK_MODE') if overrides else '') or 'prefer_live' %}
+              <select name="ask_mode" title="How to pick base ask price">
+                <option value="prefer_live" {% if am == 'prefer_live' %}selected{% endif %}>Prefer live orderbook</option>
+                <option value="legacy_max" {% if am == 'legacy_max' %}selected{% endif %}>Legacy: max(live, gamma)</option>
+              </select>
+              <div class="field-hint">Prefer-live usually increases fills and avoids stale Gamma high prices. Legacy may skip fewer trades when live book glitches.</div>
+            </div>
+          </details>
+
+          <input type="hidden" name="market_query" value="{{ poly_cfg.market_query if poly_cfg else 'Bitcoin Up or Down' }}" />
+          <input type="hidden" name="outcome_up" value="{{ poly_cfg.outcome_up if poly_cfg else 'Up' }}" />
+          <input type="hidden" name="outcome_down" value="{{ poly_cfg.outcome_down if poly_cfg else 'Down' }}" />
+        </div>
+
+        <button type="submit" class="btn-save-sidebar">Save Trading</button>
+      </form>
+
+      <!-- Market Quality (Orderbook health) -->
+      <form class="form-tight" method="post" action="/settings/market_quality">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Market quality</div>
+          <div class="field-hint mb-6">Optional filters to avoid bad spreads / thin books (helps fill-rate &amp; reduces slippage).</div>
+
+          <div class="config-field">
+            <label>Max spread (bps)</label>
+            <input name="mq_max_spread_bps" value="{{ (overrides.get('C5_MQ_MAX_SPREAD_BPS') if overrides else '') or '120' }}" placeholder="e.g. 120" />
+            <div class="field-hint">0 disables this filter.</div>
+          </div>
+
+          <div class="config-field">
+            <label>Min depth (USDC)</label>
+            <input name="mq_min_depth_usdc" value="{{ (overrides.get('C5_MQ_MIN_DEPTH_USDC') if overrides else '') or '15' }}" placeholder="e.g. 15" />
+            <div class="field-hint">Depth is measured within the depth cap below.</div>
+          </div>
+
+          <div class="config-field">
+            <label>Min top-of-book (USDC)</label>
+            <input name="mq_min_book_usdc" value="{{ overrides.get('C5_POLY_MIN_BOOK_USDC') if (overrides is not none and 'C5_POLY_MIN_BOOK_USDC' in overrides) else '8' }}" placeholder="e.g. 8" />
+            <div class="field-hint">Minimum USDC at the single best ask level. 0 disables. Skips trade if top of book is too thin regardless of MQ depth.</div>
+          </div>
+
+          <div class="config-field">
+            <label>Depth cap (bps)</label>
+            <input name="mq_depth_cap_bps" value="{{ (overrides.get('C5_MQ_DEPTH_CAP_BPS') if overrides else '') or '30' }}" placeholder="e.g. 30" />
+            <div class="field-hint">Depth is summed up to ask * (1 + cap).</div>
+          </div>
+
+          <div class="config-field">
+            <label>Adaptive edge (spread mult)</label>
+            <input name="mq_edge_spread_mult" value="{{ (overrides.get('C5_MQ_EDGE_SPREAD_MULT') if overrides else '') or '0.10' }}" placeholder="e.g. 0.10" />
+            <div class="field-hint">Adds extra edge requirement when spread widens.</div>
+          </div>
+        </div>
+        <button type="submit" class="btn-save-sidebar">Save Market Quality</button>
+      </form>
+
+      <!-- Early exit -->
+      <form class="form-tight" method="post" action="/settings/early_exit">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Early exit</div>
+          <div class="field-hint mb-6">Take profit or cut losses before the window resolves. Checks open positions every ~30s.</div>
+
+          <div class="config-field">
+            <label>Enable early exit</label>
+            <select name="early_exit_enabled">
+              <option value="false" {% if not ((overrides.get('C5_EARLY_EXIT_ENABLED') or 'false')|string|lower in ('1','true','yes')) %}selected{% endif %}>Disabled</option>
+              <option value="true"  {% if  ((overrides.get('C5_EARLY_EXIT_ENABLED') or 'false')|string|lower in ('1','true','yes')) %}selected{% endif %}>Enabled</option>
+            </select>
+            <div class="field-hint">Only exits filled, unresolved positions.</div>
+          </div>
+
+          <div class="config-field">
+            <label>Trail drop (%)</label>
+            <input name="early_exit_trail_pct" value="{{ (overrides.get('C5_EARLY_EXIT_TRAIL_PCT') if overrides else '') or '15' }}" placeholder="e.g. 15" />
+            <div class="field-hint">Exit when bid drops this % from its peak. e.g. 15 = sell if bid falls 15% from highest seen.</div>
+          </div>
+
+          <div class="config-field">
+            <label>Trail activates after (%)</label>
+            <input name="early_exit_trail_act_pct" value="{{ (overrides.get('C5_EARLY_EXIT_TRAIL_ACT_PCT') if overrides else '') or '5' }}" placeholder="e.g. 10" />
+            <div class="field-hint">Trailing stop only arms once bid is this % above entry. Prevents false triggers on tiny moves.</div>
+          </div>
+
+          <div class="config-field">
+            <label>Hard stop loss (%)</label>
+            <input name="early_exit_sl_pct" value="{{ (overrides.get('C5_EARLY_EXIT_SL_PCT') if overrides else '') or '25' }}" placeholder="e.g. 50" />
+            <div class="field-hint">Always-on floor. Exit immediately if bid falls this % below entry.</div>
+          </div>
+        </div>
+        <button type="submit" class="btn-save-sidebar">Save Early Exit</button>
+      </form>
+
+      <!-- Per-asset tuning -->
+      <form class="form-tight" method="post" action="/settings/per_asset">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Per-asset tuning</div>
+          <div class="field-hint mb-6">Override thresholds per symbol. Leave blank to use global defaults.</div>
+
+          <div class="flex-between mb-6" style="gap:8px;">
+            <button type="button" class="btn-secondary-sm" onclick="showPerAssetSuggestions()">Suggest from history</button>
+            <button type="button" class="btn-secondary-sm" onclick="applyPerAssetSuggestions()">Auto-apply</button>
+          </div>
+
+          {% for sym in (cfg.symbols or [cfg.symbol]) %}
+            {% set row = per_asset_tuning.get(sym, {}) if per_asset_tuning else {} %}
+            {% set k = sym.replace('-', '_').replace('/', '_').upper() %}
+            <details class="mt-6">
+              <summary class="small muted">{{ sym }}</summary>
+              <div class="config-field mt-6">
+                <label>Confidence threshold</label>
+                <div class="range-row">
+                  <input class="range" type="range" min="0.50" max="0.85" step="0.01" value="{{ (row.get('confidence_threshold') if row.get('confidence_threshold','')!='' else cfg.confidence_threshold)|default(0.58) }}" oninput="syncRangeNumber(this)" />
+                  <input class="range-num" name="pa_{{ k }}_confidence_threshold" value="{{ row.get('confidence_threshold','') }}" placeholder="(global {{ cfg.confidence_threshold }})" oninput="syncNumberRange(this)" />
+                </div>
+                <div class="field-hint">Higher = fewer trades, higher conviction. Suggested range: 0.55–0.70.</div>
+              </div>
+              <div class="config-field">
+                <label>Edge min</label>
+                <input name="pa_{{ k }}_edge_min" value="{{ row.get('edge_min','') }}" placeholder="(env C5_POLY_EDGE_MIN)" />
+              </div>
+              <div class="config-field">
+                <label>Max spread (bps)</label>
+                <input name="pa_{{ k }}_mq_max_spread_bps" value="{{ row.get('mq_max_spread_bps','') }}" placeholder="(global MQ max)" />
+              </div>
+              <div class="config-field">
+                <label>Min depth (USDC)</label>
+                <input name="pa_{{ k }}_mq_min_depth_usdc" value="{{ row.get('mq_min_depth_usdc','') }}" placeholder="(global MQ min)" />
+              </div>
+            </details>
+          {% endfor %}
+        </div>
+        <button type="submit" class="btn-save-sidebar">Save Per-Asset Tuning</button>
+      </form>
+
+      <script>
+        function syncRangeNumber(rangeEl){
+          var wrap = rangeEl.closest('.range-row');
+          if(!wrap) return;
+          var num = wrap.querySelector('.range-num');
+          if(!num) return;
+          // Only set the numeric input if the user hasn't typed a custom blank.
+          num.value = Number(rangeEl.value).toFixed(2);
+        }
+        function syncNumberRange(numEl){
+          var wrap = numEl.closest('.range-row');
+          if(!wrap) return;
+          var range = wrap.querySelector('.range');
+          if(!range) return;
+          var v = parseFloat(numEl.value);
+          if(!isFinite(v)) return;
+          range.value = v;
+        }
+
+        function showPerAssetSuggestions(){
+          fetch('/api/per_asset/suggestions', {credentials:'same-origin'})
+            .then(function(r){ return r.ok ? r.json() : {}; })
+            .then(function(d){
+              if(!d || typeof d !== 'object') return;
+              var lines = [];
+              Object.keys(d).forEach(function(sym){
+                var row = d[sym] || {};
+                if(!row || typeof row !== 'object') return;
+                lines.push(sym + ': conf ≥ ' + row.confidence_threshold + '  (n=' + (row.sample||0) + ', winrate=' + (row.win_rate||0) + ')');
+              });
+              if(lines.length===0){
+                alert('No suggestions yet (need more resolved filled trades).');
+              } else {
+                alert('Suggestions (copy into the fields, or click Auto-apply):\n\n' + lines.join('\n'));
+              }
+            }).catch(function(){
+              alert('Failed to load suggestions.');
+            });
+        }
+
+        function applyPerAssetSuggestions(){
+          if(!confirm('Apply suggested per-asset confidence thresholds? This writes to runtime overrides.')) return;
+          fetch('/settings/per_asset/apply_suggestions', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:''})
+            .then(function(){ window.location.reload(); })
+            .catch(function(){ alert('Failed to apply suggestions.'); });
+        }
+      </script>
+
+      <!-- Wallet Care (noob-friendly) -->
+      <form class="form-tight" method="post" action="/settings/gas">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Wallet care</div>
+
+          <div class="toggle-wrap">
+            <span class="toggle-label">Auto top-up gas</span>
+            <label class="toggle" title="Optional/advanced: if enabled, the bot will try to buy a little gas using USDC when low. This still requires some existing gas in the wallet.">
+              <input type="checkbox" name="gas_topup_enabled" value="true" aria-label="Auto top-up gas" {% if overrides and (overrides.get('C5_GAS_TOPUP_ENABLED') in ['true','True','1']) %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="config-field">
+            <label>Target gas ({{ (overrides.get('C5_NATIVE_GAS_SYMBOL') if overrides else '') or 'POL' }})</label>
+            <input name="gas_topup_target_native" value="{{ (overrides.get('C5_GAS_TOPUP_TARGET_NATIVE') if overrides else '') or '1.0' }}" placeholder="e.g. 1.0" />
+            <div class="field-hint">Bot will try to maintain this balance (best-effort).</div>
+          </div>
+
+          <div class="config-field">
+            <label>Max spend (USDC)</label>
+            <input name="gas_topup_max_usdc" value="{{ (overrides.get('C5_GAS_TOPUP_MAX_USDC') if overrides else '') or '5' }}" placeholder="e.g. 5" />
+            <div class="field-hint">Safety cap for buying gas token.</div>
+          </div>
+
+          <details>
+            <summary class="setup-details-toggle">Advanced gas settings</summary>
+            <div class="config-field mt-10">
+              <label>Gas token symbol</label>
+              <input name="native_gas_symbol" value="{{ (overrides.get('C5_NATIVE_GAS_SYMBOL') if overrides else '') or 'POL' }}" placeholder="POL" />
+            </div>
+            <div class="config-field">
+              <label>Low gas warning threshold</label>
+              <input name="native_gas_min" value="{{ (overrides.get('C5_NATIVE_GAS_MIN') if overrides else '') or '0.15' }}" placeholder="0.15" />
+              <div class="field-hint">Below this, the dashboard warns loudly.</div>
+            </div>
+            <div class="field-hint">Note: swapping still needs some existing gas. If gas is near-zero, send a small amount manually first.</div>
+          </details>
+        </div>
+        <button type="submit" class="btn-save-sidebar">Save Wallet Care</button>
+      </form>
+
+      <!-- Signal Sensitivity -->
+      <form class="form-tight" method="post" action="/settings/model">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Signal</div>
+          <div class="config-field">
+            <label>Threshold (0.50&ndash;0.99)</label>
+            <input name="confidence_threshold" placeholder="0.55" value="{{ (overrides.get('C5_CONFIDENCE_THRESHOLD') if overrides else '') or cfg.confidence_threshold }}" />
+          </div>
+
+          <details class="mt-6">
+            <summary class="small muted">Data &amp; feed</summary>
+
+            <div class="toggle-wrap mt-6">
+              <span class="toggle-label">Incremental candles</span>
+              <label class="toggle" title="Fetch only new Coinbase candles instead of refetching the full lookback each run (faster, fewer failures).">
+                <input type="checkbox" name="incremental_candles" value="true" aria-label="Incremental candles"
+                       {% if (not overrides) or ('C5_COINBASE_INCREMENTAL_CANDLES' not in overrides) or (overrides.get('C5_COINBASE_INCREMENTAL_CANDLES') in ['true','True','1']) %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div class="toggle-wrap">
+              <span class="toggle-label">RTDS JSON PING</span>
+              <label class="toggle" title="Polymarket recommends sending JSON PING messages every ~5s to keep RTDS connections healthy.">
+                <input type="checkbox" name="rtds_json_ping_enabled" value="true" aria-label="RTDS JSON PING"
+                       {% if (not overrides) or ('C5_RTDS_JSON_PING_ENABLED' not in overrides) or (overrides.get('C5_RTDS_JSON_PING_ENABLED') in ['true','True','1']) %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div class="config-field">
+              <label>RTDS ping interval (sec)</label>
+              <input name="rtds_json_ping_interval_sec" value="{{ (overrides.get('C5_RTDS_JSON_PING_INTERVAL_SEC') if overrides else '') or '5' }}" placeholder="e.g. 5" />
+            </div>
+
+            <div class="config-field">
+              <label>Chainlink stale threshold (sec)</label>
+              <input name="chainlink_stale_threshold_sec" value="{{ (overrides.get('C5_CHAINLINK_STALE_THRESHOLD_SEC') if overrides else '') or '30' }}" placeholder="e.g. 30" />
+              <div class="field-hint">If the Chainlink price feed is older than this, the bot treats it as stale (affects snipe + oracle alignment).</div>
+            </div>
+          </details>
+        </div>
+        <button type="submit" class="btn-save-sidebar">Save Signal</button>
+      </form>
+
+      <!-- Risk Rails -->
+      <form class="form-tight" method="post" action="/settings/risk">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Risk rails</div>
+          <div class="field-hint mb-6">Circuit breakers that auto-pause trading to protect capital.</div>
+
+          <div class="config-field">
+            <label>Daily loss limit (%)</label>
+            <input name="risk_daily_loss_pct" value="{{ overrides.get('C5_RISK_DAILY_LOSS_PCT', '10') if overrides else '10' }}" placeholder="e.g. 10" />
+            <div class="field-hint">Pause trading if daily losses exceed this % of starting balance. 0 = disabled.</div>
+          </div>
+
+          <div class="config-field">
+            <label>Consec. loss limit</label>
+            <input name="risk_consec_loss_limit" value="{{ overrides.get('C5_RISK_CONSEC_LOSS_LIMIT', '3') if overrides else '3' }}" placeholder="e.g. 3" />
+            <div class="field-hint">Pause after this many consecutive losses. 0 = disabled.</div>
+          </div>
+
+          <div class="config-field">
+            <label>Unfilled ratio (0&ndash;1)</label>
+            <input name="risk_unfilled_ratio" value="{{ overrides.get('C5_RISK_UNFILLED_RATIO', '0.5') if overrides else '0.5' }}" placeholder="e.g. 0.5" />
+            <div class="field-hint">Pause if more than this fraction of recent orders go unfilled. 0 = disabled.</div>
+          </div>
+
+          <div class="config-field">
+            <label>Unfilled lookback</label>
+            <input name="risk_unfilled_lookback" value="{{ overrides.get('C5_RISK_UNFILLED_LOOKBACK', '20') if overrides else '20' }}" placeholder="e.g. 20" />
+            <div class="field-hint">Number of recent orders to check for unfilled ratio.</div>
+          </div>
+
+          <div class="config-field">
+            <label>Auto-resume (minutes)</label>
+            <input name="risk_auto_resume_minutes" value="{{ overrides.get('C5_RISK_AUTO_RESUME_MINUTES', '45') if overrides else '45' }}" placeholder="e.g. 45" />
+            <div class="field-hint">After a risk pause, auto-resume trading after this many minutes. 0 = manual resume only.</div>
+          </div>
+        </div>
+        <button type="submit" class="btn-save-sidebar">Save Risk Rails</button>
+      </form>
+
+      <!-- Symbols -->
+      <form class="form-tight" method="post" action="/settings/symbols">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">Symbols</div>
+          <div class="field-hint mb-6">Which 15-minute Up/Down markets to trade. Comma-separated Coinbase pair names.</div>
+
+          <div class="config-field">
+            <label>Active symbols</label>
+            <input name="symbols" value="{{ cfg.symbols|join(', ') if cfg.symbols else cfg.symbol }}" placeholder="e.g. BTC-USD, ETH-USD" />
+            <div class="field-hint">
+              Available: BTC-USD, ETH-USD, SOL-USD, XRP-USD.
+              Default: BTC-USD only.
+            </div>
+          </div>
+
+          <div class="config-field">
+            <label>Primary symbol</label>
+            <input name="primary" value="{{ cfg.symbol }}" placeholder="e.g. BTC-USD" />
+            <div class="field-hint">The main symbol the bot trades. Must be in the list above.</div>
+          </div>
+        </div>
+        <button type="submit" class="btn-save-sidebar">Save Symbols</button>
+      </form>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <!-- Auto-update notification -->
+        <div class="sidebar-version-row">
+          <span class="sidebar-version mono small">v{{ app_version|default('?') }}</span>
+        </div>
+<a class="logout-link" href="/logout">&#8599; Logout</a>
+      </div>
+    </div>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main-content">
+
+      {% if dm == 'live' %}
+        <div class="notice danger mb-12">
+          <div>
+            <b>LIVE mode is enabled.</b> Real orders may be placed. Not financial advice. You can lose money.
+            <span class="muted">Auto-redeem is enabled by default (can be disabled). Manual redeem may still be required in some cases.</span>
+            <span class="muted">See legal/RISK_DISCLOSURE.md.</span>
+          </div>
+          <span class="badge">risk</span>
+        </div>
+      {% elif dm == 'dry' %}
+        <div class="notice warn mb-12">
+          <div>
+            <b>DRY-RUN mode.</b> The bot will simulate trades but should not place real orders.
+            Confirm markets/outcomes match before going LIVE.
+          </div>
+          <span class="badge">dry</span>
+        </div>
+      {% else %}
+        <div class="notice mb-12">
+          <div>
+            <b>PAPER mode.</b> Safe-by-default: no real orders. Start here, then DRY-RUN, then LIVE (small).
+          </div>
+          <span class="badge">paper</span>
+        </div>
+      {% endif %}
+
+      {# Noob-friendly critical warnings #}
+      {% if snap and (snap.get('native_gas_balance', 0) < (native_gas_min|default(0.15))) %}
+        <div class="notice warn mb-12">
+          <div>
+            <b>Low gas warning.</b>
+            This wallet is low on <span class="mono">{{ snap.get('native_gas_symbol','POL') }}</span>.
+            Redeems/withdrawals may fail until you top it up.
+            <span class="muted">Quick fix: send ~$1–$3 worth of {{ snap.get('native_gas_symbol','POL') }} (POL/MATIC) to your bot wallet{% if wallet_address %}: <span class="mono" style="font-size:0.8rem;word-break:break-all;">{{ wallet_address }}</span>{% endif %}.</span>
+            <span class="muted">Optional: see “How It Works” → Advanced → Top up gas.</span>
+          </div>
+          <span class="badge">gas</span>
+        </div>
+      {% endif %}
+
+      <!-- Tab bar — 3 tabs -->
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tab-signal">Signal &amp; Trading</button>
+        <button class="tab-btn" data-tab="tab-trades">Trades &amp; Equity</button>
+        <button class="tab-btn" data-tab="tab-ops">Ops Events</button>
+        <button class="tab-btn" data-tab="tab-terminal">Terminal</button>
+        <button class="tab-btn" data-tab="tab-help">How It Works</button>
+      </div>
+
+      <!-- ============================================================
+           TAB 1 — SIGNAL & LIVE TRADING (merged)
+           ============================================================ -->
+      <div class="tab-panel active" id="tab-signal">
+
+        {# ── Symbol Switcher ── #}
+        {% set active_symbols = (overrides.get('C5_SYMBOLS') or cfg.symbol or 'SOL-USD').split(',') %}
+        {% if active_symbols|length > 1 %}
+        <div class="symbol-switcher mb-12" id="symbolSwitcher">
+          {% for sym in active_symbols %}
+            {% set sym = sym.strip() %}
+            <button class="sym-btn{% if loop.first %} active{% endif %}"
+                    data-symbol="{{ sym }}"
+                    onclick="switchSymbol('{{ sym }}')">
+              {{ sym }}
+            </button>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Signal + Chart side-by-side ── #}
+        <div class="grid-2">
+          {# LEFT: Signal Card #}
+          <div class="card">
+            <div class="hd">
+              <h2>Signal</h2>
+              <span class="hd-badge">
+                <span id="fillProbBadge" class="fill-badge fill-unk" title="Fill probability from Liquidity Heat">--</span>
+                <span class="live-dot {% if state and state.get('status') == 'ok' %}on{% else %}off{% endif %}"></span>
+                auto-refresh
+              </span>
+            </div>
+            <input type="hidden" id="activeSymbolInput" name="symbol" value="">
+            <div id="signalState" class="bd">
+              <div class="small muted" style="padding:0.5rem">Loading signal…</div>
+            </div>
+          </div>
+
+          {# RIGHT: Live BTC Chart #}
+          <div class="card">
+            <div class="hd">
+              <h2 id="liveChartTitle">--</h2>
+              <span class="hd-badge mono" id="btcSpotBadge">$--</span>
+            </div>
+            <div class="bd">
+              <div class="chartBox h240">
+                <canvas id="btcLiveChart"></canvas>
+              </div>
+              <div class="small mt-12 flex-between">
+                <span>Live spot price &middot; every 10s</span>
+                <span class="mono fs-11" id="btcPriceChange">--</span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <script>
+        (function(){
+          // ── Init active symbol BEFORE any refresh calls ──────────────
+          if (!window._activeSymbol) {
+            var _firstBtn = document.querySelector('.sym-btn');
+            window._activeSymbol = _firstBtn ? (_firstBtn.getAttribute('data-symbol') || '') : '';
+          }
+          // Ensure first button shows as active on load
+          document.querySelectorAll('.sym-btn').forEach(function(b){
+            b.classList.toggle('active', b.getAttribute('data-symbol') === window._activeSymbol);
+          });
+          if(window.__btcChartInit) return;
+          window.__btcChartInit = true;
+          var el = document.getElementById('btcLiveChart');
+          if(!el || !window.Chart) return;
+          var ctx = el.getContext('2d');
+          var prices = [], labels = [], MAX = 120;
+          window.__chartPrices = prices; window.__chartLabels = labels;
+          var gradient = ctx.createLinearGradient(0, 0, 0, 240);
+          gradient.addColorStop(0, 'rgba(247,215,116,0.18)');
+          gradient.addColorStop(1, 'rgba(247,215,116,0)');
+          var chart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: labels, datasets: [{
+              data: prices,
+              borderColor: 'rgba(247,215,116,0.9)',
+              backgroundColor: gradient,
+              tension: 0.3, pointRadius: 0, fill: true, borderWidth: 1.5
+            }]},
+            options: {
+              responsive: true, maintainAspectRatio: false, animation: false,
+              plugins: { legend: { display: false },
+                tooltip: { mode:'index', intersect:false,
+                  callbacks: { label: function(c){ return '$'+Number(c.raw).toLocaleString(undefined,{minimumFractionDigits:2}); }}
+                }
+              },
+              scales: {
+                x: { ticks: { color:'rgba(255,255,255,0.3)', font:{size:9}, maxTicksLimit:8 }, grid: { color:'rgba(255,255,255,0.04)' }},
+                y: { ticks: { color:'rgba(255,255,255,0.4)', font:{size:10},
+                       callback: function(v){ return '$'+Number(v).toLocaleString(); }
+                     }, grid: { color:'rgba(255,255,255,0.05)' }}
+              }
+            }
+          });
+          var badge = document.getElementById('btcSpotBadge');
+          var change = document.getElementById('btcPriceChange');
+          var firstPrice = null; window.__chartFirstPrice = null;
+
+          // --- Liquidity Heat (Market Quality) ---
+          function setMQUI(score, label, spreadBps, depthUsd, reason, spreadHint, depthHint){
+            var fill = document.getElementById('mqHeatFill');
+            var pill = document.getElementById('mqHeatPill');
+            var spreadEl = document.getElementById('mqHeatSpread');
+            var depthEl = document.getElementById('mqHeatDepth');
+            var reasonEl = document.getElementById('mqHeatReason');
+            var spreadHintEl = document.getElementById('mqHeatSpreadHint');
+            var depthHintEl = document.getElementById('mqHeatDepthHint');
+            var dot1 = document.getElementById('mqHeatDot');
+            var dot2 = document.getElementById('mqHeatDot2');
+
+            if(fill) fill.style.width = Math.max(0, Math.min(100, score)) + '%';
+            if(pill) pill.textContent = label + ' • ' + score + '/100';
+            if(spreadEl) spreadEl.textContent = (spreadBps==null ? '--' : spreadBps.toFixed(1) + ' bps');
+            if(depthEl) depthEl.textContent = (depthUsd==null ? '--' : '$' + Math.round(depthUsd).toLocaleString());
+            if(reasonEl) reasonEl.textContent = reason || '--';
+            if(spreadHintEl) spreadHintEl.textContent = spreadHint || '';
+            if(depthHintEl) depthHintEl.textContent = depthHint || '';
+
+            var cls = (score >= 75) ? 'good' : (score >= 45) ? 'mid' : 'bad';
+            [dot1, dot2].forEach(function(d){
+              if(!d) return;
+              d.classList.remove('good','mid','bad');
+              d.classList.add(cls);
+            });
+          }
+
+          window.refreshMQ = function refreshMQ(){
+            var _sym = window._activeSymbol || '';
+            fetch('/api/mq' + (_sym ? '?symbol='+encodeURIComponent(_sym) : ''), {credentials:'same-origin'})
+              .then(function(r){ return r.ok ? r.json() : null; })
+              .then(function(d){
+                if(!d) return;
+
+                var staleNote  = document.getElementById('mqStaleNote');
+                var errorNote  = document.getElementById('mqErrorNote');
+
+                // Show error if API failed even after cache fallback
+                if(!d.ok){
+                  if(errorNote){ errorNote.textContent = ' error: ' + (d.detail || d.error || 'unknown'); errorNote.style.display=''; }
+                  return;
+                }
+                if(errorNote) errorNote.style.display='none';
+                if(staleNote) staleNote.style.display = d.stale ? '' : 'none';
+                var slugEl = document.getElementById('mqWindowSlug');
+                if(slugEl) slugEl.textContent = d.window_slug || '--';
+
+                var maxSpread = (d.thresholds && typeof d.thresholds.max_spread_bps === 'number') ? d.thresholds.max_spread_bps : 0;
+                var minDepth  = (d.thresholds && typeof d.thresholds.min_depth_usdc === 'number') ? d.thresholds.min_depth_usdc : 0;
+
+                // API returns spread/depth nested under d.up and d.down — average both sides
+                var _upOk = d.up  && d.up.ok;
+                var _dnOk = d.down && d.down.ok;
+                var spread = null, depth = null;
+                if (_upOk && _dnOk) {
+                  spread = (d.up.spread_bps + d.down.spread_bps) / 2;
+                  depth  = (d.up.depth_usdc  + d.down.depth_usdc)  / 2;
+                } else if (_upOk) {
+                  spread = d.up.spread_bps;  depth = d.up.depth_usdc;
+                } else if (_dnOk) {
+                  spread = d.down.spread_bps; depth = d.down.depth_usdc;
+                }
+
+                // Per-side detail fields
+                var upSpreadEl = document.getElementById('mqUpSpreadVal');
+                var upDepthEl  = document.getElementById('mqUpDepthVal');
+                var dnSpreadEl = document.getElementById('mqDnSpreadVal');
+                var dnDepthEl  = document.getElementById('mqDnDepthVal');
+                if(upSpreadEl) upSpreadEl.textContent = _upOk ? d.up.spread_bps.toFixed(1) : '--';
+                if(upDepthEl)  upDepthEl.textContent  = _upOk ? '$' + Math.round(d.up.depth_usdc).toLocaleString() : '--';
+                if(dnSpreadEl) dnSpreadEl.textContent = _dnOk ? d.down.spread_bps.toFixed(1) : '--';
+                if(dnDepthEl)  dnDepthEl.textContent  = _dnOk ? '$' + Math.round(d.down.depth_usdc).toLocaleString() : '--';
+
+                // Convert into a 0–100 score. Higher is better.
+                var spreadRatio = 1.0;
+                if(maxSpread > 0 && spread != null){
+                  spreadRatio = Math.min(1.0, maxSpread / Math.max(spread, 0.000001));
+                }
+                var depthRatio = 1.0;
+                if(minDepth > 0 && depth != null){
+                  depthRatio = Math.min(1.0, depth / Math.max(minDepth, 1));
+                }
+                var score = Math.round(100 * (0.55 * spreadRatio + 0.45 * depthRatio));
+
+                var label = (score >= 75) ? 'Good' : (score >= 45) ? 'OK' : 'Thin';
+
+                var reasons = [];
+                if(_upOk && !d.up.passes)   reasons.push('UP spread/depth fails filter');
+                if(_dnOk && !d.down.passes) reasons.push('DOWN spread/depth fails filter');
+                if(reasons.length === 0)    reasons.push('Filters pass — fills should be possible');
+
+                var spreadHint = (maxSpread > 0) ? ('(max ' + maxSpread + ' bps)') : '(spread filter off)';
+                var depthHint  = (minDepth > 0)  ? ('(min $' + Math.round(minDepth).toLocaleString() + ')') : '(depth filter off)';
+
+                setMQUI(score, label, spread, depth, reasons.join(' • '), spreadHint, depthHint);
+
+                // Badge next to Signal: Likely Fill / Risky / Skip
+                var fillBadge = document.getElementById('fillProbBadge');
+                if(fillBadge){
+                  var txt = '--';
+                  var cls = 'fill-unk';
+                  if(typeof score === 'number'){
+                    if(score >= 75){ txt = 'Likely Fill'; cls = 'fill-good'; }
+                    else if(score >= 45){ txt = 'Risky'; cls = 'fill-warn'; }
+                    else { txt = 'Skip'; cls = 'fill-bad'; }
+                  }
+                  fillBadge.textContent = txt;
+                  fillBadge.classList.remove('fill-good','fill-warn','fill-bad','fill-unk');
+                  fillBadge.classList.add(cls);
+                  if(spread != null && depth != null){
+                    fillBadge.title = 'Liquidity Heat: spread ' + spread.toFixed(2) + ' bps ' + spreadHint + ' · depth $' + Math.round(depth).toLocaleString() + ' ' + depthHint;
+                  } else {
+                    fillBadge.title = 'Liquidity Heat: waiting for data…';
+                  }
+                }
+              })
+              .catch(function(e){
+                var errorNote = document.getElementById('mqErrorNote');
+                if(errorNote){ errorNote.textContent = ' fetch error: ' + e.message; errorNote.style.display=''; }
+              });
+          }
+          function refresh(){
+            var _sym = window._activeSymbol || '';
+            fetch('/api/spot/price' + (_sym ? '?symbol='+encodeURIComponent(_sym) : ''),{credentials:'same-origin'})
+              .then(function(r){ return r.ok ? r.json() : null; })
+              .then(function(d){
+                if(!d || !d.price) return;
+                var p = d.price;
+                var now = new Date();
+                var t = now.toTimeString().slice(0,8);
+                prices.push(p); labels.push(t);
+                if(prices.length > MAX){ prices.shift(); labels.shift(); }
+                chart.update();
+                if(badge) badge.textContent = '$'+Number(p).toLocaleString(undefined,{minimumFractionDigits:2});
+                // update inline spot price in state partial too
+                var inline = document.getElementById('liveSpotPrice');
+                if(inline) inline.textContent = '$'+Number(p).toLocaleString(undefined,{minimumFractionDigits:2});
+                // show change since start
+                if(firstPrice===null) firstPrice = p;
+                if(change){
+                  var diff = p - firstPrice;
+                  var pct = firstPrice ? ((diff/firstPrice)*100).toFixed(2) : '0.00';
+                  var sign = diff >= 0 ? '+' : '';
+                  change.textContent = sign+'$'+diff.toFixed(2)+' ('+sign+pct+'%)';
+                  change.style.color = diff >= 0 ? 'var(--mint)' : 'var(--red)';
+                }
+              }).catch(function(){});
+
+            // Update Liquidity Heat alongside the spot update
+            if(window.refreshMQ) window.refreshMQ();
+          }
+          window.__refreshFn = refresh;
+          refresh();
+          setInterval(refresh, 10000);
+
+          // ── Live status JS poller (respects active symbol) ──────────────────
+          function refreshLiveStatus() {
+            var sym = window._activeSymbol || '';
+            var url = '/p/live' + (sym ? '?symbol=' + encodeURIComponent(sym) : '');
+            fetch(url, {credentials: 'same-origin'})
+              .then(function(r){ return r.ok ? r.text() : null; })
+              .then(function(html){
+                if (!html) return;
+                var el = document.getElementById('liveStatus');
+                if (el) el.innerHTML = html;
+              }).catch(function(){});
+          }
+          refreshLiveStatus();
+          setInterval(refreshLiveStatus, 5000);
+          window.refreshLiveStatus = refreshLiveStatus;
+
+          // ── Signal card JS poller (replaces HTMX — respects active symbol) ──
+          function refreshSignalCard() {
+            var sym = window._activeSymbol || '';
+            var url = '/p/state' + (sym ? '?symbol=' + encodeURIComponent(sym) : '');
+            fetch(url, {credentials: 'same-origin'})
+              .then(function(r){ return r.ok ? r.text() : null; })
+              .then(function(html){
+                if (!html) return;
+                var el = document.getElementById('signalState');
+                if (el) {
+                  el.innerHTML = html;
+                  // Re-run countdown/learning timers (innerHTML doesn't exec scripts)
+                  if (window.startSignalAgeCountdown) startSignalAgeCountdown();
+                  if (window.startLearningPhaseCountdown) startLearningPhaseCountdown();
+                  if (window.refreshLearningStatus) window.refreshLearningStatus();
+                }
+              })
+              .catch(function(){});
+          }
+          // Set chart title on load
+          (function(){
+            var sym = window._activeSymbol || '';
+            var title = document.getElementById('liveChartTitle');
+            if (title && sym) title.textContent = sym;
+          })();
+          refreshSignalCard();
+          setInterval(refreshSignalCard, 5000);
+          window.refreshSignalCard = refreshSignalCard;
+
+          // ── Live Trading card poller (symbol-aware) ──────────────────
+          function refreshLiveStatus() {
+            var sym = window._activeSymbol || '';
+            var url = '/p/live' + (sym ? '?symbol=' + encodeURIComponent(sym) : '');
+            fetch(url, {credentials: 'same-origin'})
+              .then(function(r){ return r.ok ? r.text() : null; })
+              .then(function(html){ if(html){ var el = document.getElementById('liveStatus'); if(el) el.innerHTML = html; }})
+              .catch(function(){});
+          }
+          refreshLiveStatus();
+          setInterval(refreshLiveStatus, 5000);
+          window.refreshLiveStatus = refreshLiveStatus;
+          setInterval(function(){ if(window.refreshLearningStatus) window.refreshLearningStatus(); }, 30000);
+          setInterval(function(){ if(window.refreshEarlyExitMonitor) window.refreshEarlyExitMonitor(); }, 30000);
+        })();
+        </script>
+
+        {# ── Liquidity Heat Card (below Signal) ── #}
+        <div class="card" style="margin-top:1rem">
+          <div class="hd">
+            <h2>
+              <span class="mq-dot" id="mqHeatDot" style="margin-right:6px"></span>
+              Liquidity Heat
+            </h2>
+            <span class="hd-badge mono" id="mqHeatPill">--</span>
+          </div>
+          <div class="bd">
+            <div class="mq-meter" aria-label="Liquidity heat meter" style="margin-bottom:1rem">
+              <div class="mq-fill" id="mqHeatFill"></div>
+            </div>
+            <div class="mq-grid">
+              <div class="mq-kv">
+                <div class="k">Spread (avg UP+DOWN)</div>
+                <div class="v"><span id="mqHeatSpread">--</span> <span class="muted" id="mqHeatSpreadHint"></span></div>
+              </div>
+              <div class="mq-kv">
+                <div class="k">Depth (avg UP+DOWN)</div>
+                <div class="v"><span id="mqHeatDepth">--</span> <span class="muted" id="mqHeatDepthHint"></span></div>
+              </div>
+              <div class="mq-kv">
+                <div class="k">UP outcome</div>
+                <div class="v"><span id="mqUpSpreadVal">--</span> bps &middot; <span id="mqUpDepthVal">--</span></div>
+              </div>
+              <div class="mq-kv">
+                <div class="k">DOWN outcome</div>
+                <div class="v"><span id="mqDnSpreadVal">--</span> bps &middot; <span id="mqDnDepthVal">--</span></div>
+              </div>
+            </div>
+            <div class="mq-hint" style="margin-top:0.75rem">
+              <span class="mq-dot" id="mqHeatDot2"></span>
+              <div>
+                <div><span class="muted">What this means:</span> <span id="mqHeatReason">--</span></div>
+                <div class="muted" style="margin-top:2px">
+                  Spread + depth from live Polymarket orderbook vs your Market Quality thresholds.
+                  <span id="mqStaleNote" class="mono danger" style="display:none"> ⚠ stale data</span>
+                  <span id="mqErrorNote" class="mono danger" style="display:none"></span>
+                  <span class="muted"> · market: </span><span id="mqWindowSlug" class="mono fs-11 muted">--</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-divider">live status</div>
+
+        {# ── Live Trading Card ── #}
+        <div class="card dual-section">
+          <div class="hd">
+            <h2>Live Trading</h2>
+            <span class="hd-badge">
+              {% if dm == 'live' %}
+                <span class="live-dot on"></span> polymarket
+              {% elif dm == 'dry' %}
+                <span class="live-dot off"></span> dry-run
+              {% else %}
+                <span class="live-dot off"></span> paper
+              {% endif %}
+            </span>
+          </div>
+          <div class="bd">
+            <div id="liveStatus">
+              <div class="small">Loading live status&hellip;</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Early Exit Monitor Card ── #}
+      {% set ee_on = (overrides.get('C5_EARLY_EXIT_ENABLED') or '')|string|lower in ('1','true','yes') %}
+      <div class="card mt-12">
+        <div class="hd">
+          <h2>Early Exit Monitor</h2>
+          <div class="hd-badge">
+            {% if ee_on %}
+              <span class="tag live tag-sm">enabled</span>
+              <span class="mono fs-11 muted" style="margin-left:6px;">
+                Trail {{ (overrides.get('C5_EARLY_EXIT_TRAIL_PCT') or '15') }}%
+                &nbsp;·&nbsp;
+                Arm +{{ (overrides.get('C5_EARLY_EXIT_TRAIL_ACT_PCT') or '5') }}%
+                &nbsp;·&nbsp;
+                SL -{{ (overrides.get('C5_EARLY_EXIT_SL_PCT') or '25') }}%
+              </span>
+            {% else %}
+              <span class="tag off tag-sm">disabled</span>
+              <span class="muted small" style="margin-left:8px;">Enable in sidebar → Early Exit</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="bd" id="earlyExitMonitor">
+          {% if ee_on %}
+            {# Open positions being monitored — rendered server-side on page load #}
+            {# JS refreshes this via /api/early_exit_status every 30s #}
+            <div class="small muted" id="eeMonitorInner">Loading…</div>
+          {% else %}
+            <div class="small muted">Early exit is disabled. Enable it in the sidebar to monitor open positions for TP/SL.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- ============================================================
+           TAB 2 — TRADES & EQUITY (merged)
+           ============================================================ -->
+      <div class="tab-panel" id="tab-trades">
+
+        {# ── Stats Summary + Reset ── #}
+        <div class="flex-between mb-12">
+          <span class="small mono ls-03">TRADE HISTORY + PERFORMANCE</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <a href="/api/ledgers" class="btn-secondary-sm" id="ledgerExportBtn"
+               style="display:inline-flex;align-items:center;gap:5px;text-decoration:none;cursor:pointer;"
+               onclick="event.preventDefault();loadLedgerList();">
+              ⬇ Ledger Library
+            </a>
+            <form class="inline" method="post" action="/reset/stats" onsubmit="return confirm('Reset all trade stats and equity history? This cannot be undone.');">
+              <button type="submit" class="btn-danger-sm">Reset Stats</button>
+            </form>
+          </div>
+        </div>
+
+        {# ── P&L Summary Cards ── #}
+        <div class="card dual-section">
+          <div class="hd">
+            <h2>P&L Summary</h2>
+            <span class="hd-badge">performance</span>
+          </div>
+          <div class="bd" hx-get="/p/pnl" hx-trigger="load, every 30s" hx-swap="innerHTML">
+            <div class="small">Loading P&L&hellip;</div>
+          </div>
+        </div>
+
+        <div class="section-divider">trade history</div>
+
+        {# ── Recent Trades Card ── #}
+        <div class="card dual-section">
+          <div class="hd">
+            <h2>Recent Trades</h2>
+            <span class="hd-badge">history</span>
+          </div>
+          <div class="bd" hx-get="/p/trades" hx-trigger="load, every 5s" hx-swap="innerHTML">
+            <div class="small">Loading trades&hellip;</div>
+          </div>
+        </div>
+
+        <div class="section-divider">equity curve</div>
+
+        {# ── Equity Chart Card ── #}
+        <div class="card dual-section">
+          <div class="hd">
+            <h2>Equity Curve</h2>
+            <span class="hd-badge">USDC</span>
+          </div>
+          <div class="bd">
+            <div class="chartBox h300">
+              <canvas id="equityChart"></canvas>
+            </div>
+            <div class="small mt-12">
+              Your total account equity over time. Updates every 30 seconds.
+            </div>
+          </div>
+        </div>
+
+        <script>
+          (function () {
+            if (window.__equityChartInit) return;
+            window.__equityChartInit = true;
+
+            var el = document.getElementById('equityChart');
+            if (!el || !window.Chart) return;
+
+            var ctx = el.getContext('2d');
+            var data = {
+              labels: [],
+              datasets: [
+                {
+                  label: 'Total equity (USDC)',
+                  data: [],
+                  borderColor: 'rgba(104,246,199,0.85)',
+                  backgroundColor: 'rgba(104,246,199,0.08)',
+                  tension: 0.3,
+                  pointRadius: 0,
+                  fill: true,
+                  borderWidth: 1.5,
+                },
+                {
+                  label: 'Realized PnL (est.)',
+                  data: [],
+                  borderColor: 'rgba(247,215,116,0.9)',
+                  backgroundColor: 'rgba(247,215,116,0)',
+                  tension: 0.25,
+                  pointRadius: 0,
+                  fill: false,
+                  borderWidth: 1.2,
+                }
+              ]
+            };
+
+            var chart = new Chart(ctx, {
+              type: 'line',
+              data: data,
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { mode: 'index', intersect: false },
+                },
+                scales: {
+                  x: {
+                    ticks: { color: 'rgba(255,255,255,0.35)', font: { size: 9 }, maxTicksLimit: 12 },
+                    grid: { color: 'rgba(255,255,255,0.04)' },
+                  },
+                  y: {
+                    ticks: { color: 'rgba(255,255,255,0.45)', font: { size: 10 } },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                  }
+                }
+              }
+            });
+            window.__equityChart = chart;
+
+            function refresh() {
+              Promise.all([
+                fetch('/api/poly/equity', { credentials: 'same-origin' }).then(function(r){ return r.ok ? r.json() : []; }),
+                fetch('/api/poly/pnl_curve', { credentials: 'same-origin' }).then(function(r){ return r.ok ? r.json() : []; })
+              ]).then(function(res){
+                var series = res[0] || [];
+                var pnl = res[1] || [];
+                if (!Array.isArray(series) || series.length === 0) return;
+
+                var last = series.slice(-600);
+                var labels = last.map(function(p){
+                  var d = new Date((p.ts || 0) * 1000);
+                  var hh = String(d.getHours()).padStart(2, '0');
+                  var mm = String(d.getMinutes()).padStart(2, '0');
+                  var ss = String(d.getSeconds()).padStart(2, '0');
+                  return hh + ':' + mm + ':' + ss;
+                });
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = last.map(function(p){ return Number(p.equity || 0); });
+
+                // Map pnl points onto the same label axis by nearest timestamp.
+                if (Array.isArray(pnl) && pnl.length > 0) {
+                  var pnlMap = {};
+                  pnl.forEach(function(p){ pnlMap[p.ts] = Number(p.pnl || 0); });
+                  chart.data.datasets[1].data = last.map(function(p){
+                    var ts = p.ts || 0;
+                    // walk back up to 10 minutes to find a pnl point
+                    for(var i=0;i<60;i++){
+                      var v = pnlMap[ts - i*10];
+                      if (typeof v === 'number') return v;
+                    }
+                    return null;
+                  });
+                }
+                chart.update();
+              }).catch(function(){});
+            }
+
+            refresh();
+            setInterval(refresh, 30000);
+          })();
+        </script>
+
+        {# ── Ledger Library Card ── #}
+        <div class="card dual-section" style="margin-top:14px;" id="ledgerLibraryCard">
+          <div class="hd">
+            <h2>Ledger Library</h2>
+            <span class="hd-badge">auto-saved</span>
+          </div>
+          <div class="bd">
+            <div class="small muted mb-10">
+              Ledgers are rebuilt automatically after every batch of resolved trades.
+              Monthly files cover one calendar month. Annual files summarise each closed month.
+            </div>
+            <div id="ledgerListWrap">
+              <div class="small muted">Loading ledgers&hellip;</div>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px;">
+              <button type="button" class="btn-secondary-sm" onclick="loadLedgerList()">Refresh list</button>
+              <button type="button" class="btn-secondary-sm" id="ledgerRebuildBtn"
+                      onclick="rebuildLedgers()">Rebuild now</button>
+            </div>
+          </div>
+        </div>
+
+        <script>
+          (function() {
+            function ledgerLabel(name) {
+              var m = name.match(/ledger_(\d{4})_(\d{2})\.xlsx/);
+              if (m) {
+                var months = ['','January','February','March','April','May','June',
+                              'July','August','September','October','November','December'];
+                return months[parseInt(m[2])] + ' ' + m[1] + ' (monthly)';
+              }
+              var a = name.match(/ledger_(\d{4})_annual\.xlsx/);
+              if (a) return a[1] + ' Annual Summary';
+              if (name === 'ledger_all_time.xlsx') return 'All-Time Overview';
+              return name;
+            }
+            window.loadLedgerList = function() {
+              var wrap = document.getElementById('ledgerListWrap');
+              if (!wrap) return;
+              fetch('/api/ledgers', {credentials: 'same-origin'})
+                .then(function(r){ return r.ok ? r.json() : null; })
+                .then(function(d) {
+                  if (!d || !d.ledgers || !d.ledgers.length) {
+                    wrap.textContent = 'No ledger files yet \u2014 they appear after the first resolved trades.';
+                    return;
+                  }
+                  var tbl = document.createElement('table');
+                  tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;';
+                  d.ledgers.forEach(function(f, i) {
+                    var tr = tbl.insertRow();
+                    tr.style.background = i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent';
+                    var c1 = tr.insertCell(); c1.style.padding = '5px 8px';
+                    c1.textContent = ledgerLabel(f.filename);
+                    var c2 = tr.insertCell(); c2.style.cssText = 'padding:5px 8px;text-align:right;color:var(--muted);';
+                    c2.textContent = f.size_kb + ' KB';
+                    var c3 = tr.insertCell(); c3.style.cssText = 'padding:5px 8px;text-align:right;color:var(--muted);';
+                    c3.textContent = f.modified;
+                    var c4 = tr.insertCell(); c4.style.cssText = 'padding:5px 8px;text-align:right;';
+                    var a = document.createElement('a');
+                    a.href = '/api/ledgers/' + encodeURIComponent(f.filename);
+                    a.style.cssText = 'color:var(--accent);text-decoration:none;';
+                    a.textContent = 'Download';
+                    c4.appendChild(a);
+                  });
+                  wrap.replaceChildren(tbl);
+                }).catch(function(){ wrap.textContent = 'Could not load ledgers.'; });
+            };
+            window.rebuildLedgers = function() {
+              var btn = document.getElementById('ledgerRebuildBtn');
+              if (btn) btn.textContent = 'Rebuilding\u2026';
+              fetch('/api/ledgers/rebuild', {method: 'POST', credentials: 'same-origin'})
+                .then(function(){ if (btn) btn.textContent = 'Rebuild now'; loadLedgerList(); })
+                .catch(function(){ if (btn) btn.textContent = 'Rebuild now'; });
+            };
+            loadLedgerList();
+          })();
+        </script>
+      </div>
+
+      <!-- ============================================================
+           TAB 3 — OPS & LOGS
+           ============================================================ -->
+      <div class="tab-panel" id="tab-ops">
+        <div hx-get="/p/ops" hx-trigger="load, every 5s" hx-swap="innerHTML">
+          <div class="card">
+            <div class="bd muted">Loading ops &amp; logs&hellip;</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           TAB 4 — TERMINAL (RAW LOG TAIL)
+           ============================================================ -->
+      <div class="tab-panel" id="tab-terminal">
+        <div hx-get="/p/terminal" hx-trigger="load, every 5s" hx-swap="innerHTML">
+          <div class="card">
+            <div class="bd muted">Loading terminal logs&hellip;</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           TAB 5 — HOW IT WORKS (comprehensive noob-friendly guide)
+           ============================================================ -->
+      <div class="tab-panel" id="tab-help">
+
+        {# ── Getting Started ── #}
+        <div class="card dual-section">
+          <div class="hd">
+            <h2>Getting Started</h2>
+            <span class="hd-badge">step-by-step</span>
+          </div>
+          <div class="bd">
+            <div class="small mb-10">
+              This bot predicts whether <b>BTC will go up or down</b> in the next 5 minutes and can optionally
+              place trades on <b>Polymarket</b> if you enable execution. It uses the <b>Chainlink oracle</b> (the same
+              price source Polymarket uses to resolve markets) and has built-in <b>risk rails</b> to protect your capital.
+              Start in paper mode first.
+            </div>
+
+            <div class="step-cards">
+              <div class="step-card">
+                <div class="step-num">1</div>
+                <div class="step-body">
+                  <div class="step-title">Start in Paper mode</div>
+                  <div class="step-desc">
+                    The bot begins in <b>PAPER</b> mode by default. It makes predictions but does <em>not</em> trade real money.
+                    Watch the Signal card for a few hours to see how it performs. No wallet or funds needed.
+                  </div>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">2</div>
+                <div class="step-body">
+                  <div class="step-title">Understand the Signal</div>
+                  <div class="step-desc">
+                    The model outputs <b>UP</b> or <b>DOWN</b> with a <b>confidence score</b> (0.50&ndash;1.00).
+                    On this dashboard the Signal card auto-refreshes and usually updates about every <b>~15 seconds</b> between retrains.
+                    Higher confidence = stronger conviction. If it's below the threshold you set in the sidebar, no trade is placed.
+                  </div>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">3</div>
+                <div class="step-body">
+                  <div class="step-title">Try Dry-Run mode</div>
+                  <div class="step-desc">
+                    Switch to <b>DRY-RUN</b> in the sidebar. The bot now finds real Polymarket markets and simulates trades,
+                    but <em>never spends money</em>. This lets you verify the full pipeline works with your wallet.
+                  </div>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">4</div>
+                <div class="step-body">
+                  <div class="step-title">Go Live (small)</div>
+                  <div class="step-desc">
+                    Set a small <b>max $ per trade</b> ($2&ndash;5). Switch to <b>LIVE</b>. The bot will place real trades
+                    on Polymarket using your connected wallet. Start small and scale up as you gain trust.
+                  </div>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">5</div>
+                <div class="step-body">
+                  <div class="step-title">Monitor &amp; Withdraw</div>
+                  <div class="step-desc">
+                    Check the <b>Trades &amp; Equity</b> tab to track wins/losses and your equity curve.
+                    When you want to take profits, use the <b>Withdraw</b> section in Advanced below.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# ── Dashboard Legend ── #}
+        <div class="card dual-section">
+          <div class="hd">
+            <h2>Dashboard Legend</h2>
+            <span class="hd-badge">what everything means</span>
+          </div>
+          <div class="bd">
+            <div class="small mb-10">Here's what every icon, badge, and number on the dashboard means.</div>
+
+            <div class="legend-grid">
+              <div class="legend-item">
+                <div class="legend-icon">&#8593;</div>
+                <div class="legend-text">
+                  <div class="legend-term up">UP Signal</div>
+                  <div class="legend-def">The model predicts BTC price will be <b>higher</b> in 5 minutes.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon">&#8595;</div>
+                <div class="legend-text">
+                  <div class="legend-term down">DOWN Signal</div>
+                  <div class="legend-def">The model predicts BTC price will be <b>lower</b> in 5 minutes.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon gold">0.72</div>
+                <div class="legend-text">
+                  <div class="legend-term">Confidence</div>
+                  <div class="legend-def">How sure the model is (0.50 = coin flip, 1.00 = 100% sure). Only trades above your <b>threshold</b> get placed.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon"><span class="live-dot on mr-0"></span></div>
+                <div class="legend-text">
+                  <div class="legend-term">Green Dot</div>
+                  <div class="legend-def">Bot is running and connected. Data is refreshing automatically.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon">&#9203;</div>
+                <div class="legend-text">
+                  <div class="legend-term gold">Training</div>
+                  <div class="legend-def">The model is retraining on fresh data. Happens every hour. Signal pauses briefly.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon fs-14"><span class="tag live tag-sm tag-xs">live</span></div>
+                <div class="legend-text">
+                  <div class="legend-term">Live Badge</div>
+                  <div class="legend-def">Trade was placed with <b>real money</b> on Polymarket.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon fs-14"><span class="tag warn tag-sm tag-xs">dry</span></div>
+                <div class="legend-text">
+                  <div class="legend-term">Dry Badge</div>
+                  <div class="legend-def">Simulated trade &mdash; <b>no real money</b> was spent. Used in paper/dry-run modes.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon up">W</div>
+                <div class="legend-text">
+                  <div class="legend-term up">Win</div>
+                  <div class="legend-def">Your prediction was correct. The market resolved in your favor.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon down">L</div>
+                <div class="legend-text">
+                  <div class="legend-term down">Loss</div>
+                  <div class="legend-def">Your prediction was wrong. The market resolved against you.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon muted">&hellip;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Pending</div>
+                  <div class="legend-def">Trade placed but market hasn't resolved yet. Wait ~5&ndash;10 minutes.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon">&#128200;</div>
+                <div class="legend-text">
+                  <div class="legend-term gold">Equity Curve</div>
+                  <div class="legend-def">A chart of your total account value over time. Going up = making money.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon fs-14 mono">$</div>
+                <div class="legend-text">
+                  <div class="legend-term">USDC</div>
+                  <div class="legend-def">USD Coin &mdash; a cryptocurrency pegged 1:1 to the US Dollar. $5 USDC = $5 USD.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# ── Sidebar Settings Explained ── #}
+        <div class="card dual-section">
+          <div class="hd">
+            <h2>Settings Explained</h2>
+            <span class="hd-badge">sidebar reference</span>
+          </div>
+          <div class="bd">
+            <div class="legend-grid">
+              <div class="legend-item">
+                <div class="legend-icon">&#9881;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Auto-trade</div>
+                  <div class="legend-def">When <b>ON</b>, the bot automatically places trades. When OFF, it only shows predictions. Turn this on when you're ready.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon">&#128171;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Dry-run</div>
+                  <div class="legend-def">Simulates trades without spending money. Perfect for testing your settings before going live.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#9889;</div>
+                <div class="legend-text">
+                  <div class="legend-term">High-risk</div>
+                  <div class="legend-def">Unlocks higher % sizing caps. Default Bet % cap is <b>10%</b>. High-risk raises it to <b>50%</b>. Dangerous.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#9760;</div>
+                <div class="legend-text">
+                  <div class="legend-term danger">Expert/UNSAFE</div>
+                  <div class="legend-def">Full control mode. Requires typing <b>I UNDERSTAND</b> once to enable. Raises Bet % cap to <b>100%</b>. Extremely dangerous.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon">&#128176;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Max $ / trade</div>
+                  <div class="legend-def">Safety cap. The bot will <b>never</b> bet more than this per trade. Start with $2&ndash;5.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon">&#128202;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Bet Mode</div>
+                  <div class="legend-def"><b>Fixed $</b> = same amount every trade. <b>% of bal</b> = a percentage of your current wallet balance (auto-scales).</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#127919;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Bet %</div>
+                  <div class="legend-def">Used only when Bet Mode = <b>% of bal</b>. Capped by risk mode: <b>10%</b> (default), <b>50%</b> (High-risk), <b>100%</b> (Expert/UNSAFE).</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon">&#127919;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Confidence Threshold</div>
+                  <div class="legend-def">Minimum confidence to place a trade. <b>0.55</b> means "only trade when the model is at least 55% sure." Higher = fewer but safer trades.</div>
+                </div>
+              </div>
+              <div class="legend-item">
+                <div class="legend-icon">&#128260;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Paper / Dry / Live</div>
+                  <div class="legend-def"><b>Paper</b> = predictions only. <b>Dry</b> = simulated trades. <b>Live</b> = real money on Polymarket. Always start on Paper.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#127919;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Snipe Mode</div>
+                  <div class="legend-def">Late-entry strategy. Near the end of each 5-minute window, checks if BTC already moved via Chainlink oracle. Higher accuracy (~80-90%+). In <b>delta-first mode</b> (default since v0.5.0), this is the <b>primary and only</b> entry mechanism — ML trades are disabled.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#9878;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Arb-first</div>
+                  <div class="legend-def">Buys <b>both</b> UP + DOWN only when the orderbook makes the combined cost less than $1.00. Locks in profit regardless of outcome. Rare but high-confidence.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128176;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Auto-redeem</div>
+                  <div class="legend-def">After a market resolves as a <b>win</b>, auto-redeem sends an on-chain transaction (Polygon) to claim your winnings. Costs a tiny amount of gas. <b>ON by default</b>.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128200;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Kelly fraction</div>
+                  <div class="legend-def">Controls bet sizing when using Kelly mode. <b>0.25</b> (1/4 Kelly) is the safe default. Higher = more aggressive. Only matters when Bet Mode = Kelly.</div>
+                </div>
+              </div>
+
+              {# ── v0.3.0 settings ── #}
+              <div class="legend-item">
+                <div class="legend-icon">&#128640;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Snipe Bet Multiplier</div>
+                  <div class="legend-def">Multiplies your normal bet size for <b>snipe trades only</b> (default <b>2&times;</b>). Because snipe accuracy is much higher, it makes sense to bet more on those trades. Still capped by your Max&nbsp;$/trade safety limit.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#9889;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Delta-First Mode</div>
+                  <div class="legend-def"><b>v0.5.0 (default ON)</b>. Disables ML-only directional trades. The snipe pass at T-10s using live Chainlink delta becomes the sole entry mechanism. The ML model still trains and shows predictions on the dashboard, but doesn't trigger trades. Set <code>C5_DELTA_FIRST=false</code> to restore ML+snipe hybrid.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128178;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Delta Pricing</div>
+                  <div class="legend-def"><b>v0.5.0 (default ON)</b>. Gates snipe trades based on the live ask vs. the delta magnitude. If the market asks more than the tier allows, the trade is skipped (too expensive). Small delta &rarr; cheap gate ($0.52). Large delta &rarr; permissive gate ($0.97). Tiers tunable via <code>C5_DELTA_PRICE_T1</code>&ndash;<code>T5</code>.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#9201;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Trade Lead (seconds)</div>
+                  <div class="legend-def">How many seconds before a window closes to place the trade. Default <b>10</b>. Lower values = more accurate direction reading, but less time for the order to fill. Applies to <b>snipe mode</b>.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#9202;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Cooldown (seconds)</div>
+                  <div class="legend-def">Minimum wait time between trades. Default <b>300</b> (5 minutes = 1 window). Prevents overtrading. Set to <b>0</b> to disable (trade every window).</div>
+                </div>
+              </div>
+
+              {# ── v0.4.0 settings ── #}
+              <div class="legend-item">
+                <div class="legend-icon">&#129504;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Ensemble Weight</div>
+                  <div class="legend-def">How much the final prediction leans on the <b>ML model vs. live Chainlink price movement</b>. Default <b>0.6</b> = 60% model + 40% Chainlink delta. Raise to <b>0.8+</b> to rely more on the trained model; lower to <b>0.4</b> to lean more on real-time price momentum. Range: 0.0&ndash;1.0.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#127769;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Quiet Hours (UTC)</div>
+                  <div class="legend-def">Comma-separated UTC hours when the bot <b>skips ML trades</b> (e.g. <code>3,4,5</code> = 3:00&ndash;5:59 AM UTC). Useful for low-liquidity periods. Snipe trades are <b>never</b> blocked by quiet hours. Leave blank to disable.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128200;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Platt Calibration <span class="lozenge mint">auto</span></div>
+                  <div class="legend-def">The model's raw probability outputs are automatically <b>calibrated</b> so that when it says &ldquo;60%&rdquo; it really means 60%. This uses Isotonic Regression on a held-out validation set. No setting to adjust &mdash; it&rsquo;s always on when enough data exists (30+ training samples).</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128279;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Hybrid Training Target <span class="lozenge mint">auto</span></div>
+                  <div class="legend-def">When the bot has collected enough <b>Chainlink price history</b> (10+ data points), it trains on Chainlink price changes instead of Coinbase. This fixes the <b>oracle mismatch</b> &mdash; the model now learns from the same price feed that decides winners. Activates automatically as data accumulates.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128737;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Edge Gate (Min Edge)</div>
+                  <div class="legend-def">Filter for ML trades. Only trades when the model's edge <b>(p &minus; market price)</b> exceeds this value. Default <b>0.03</b>. Set to <b>0.02&ndash;0.05</b> for conservative trading. Set to <b>0</b> to disable. <b>Snipe trades bypass this</b> &mdash; they use their own delta threshold.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128721;</div>
+                <div class="legend-text">
+                  <div class="legend-term danger">Risk Rails</div>
+                  <div class="legend-def">Automated safety limits (circuit breakers) that <b>pause trading</b> when things go wrong. Protects your capital while you're away. All values adjustable in the sidebar under <b>Risk Rails</b>. Set any to <b>0</b> to disable that rail.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128200;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Daily Loss Limit %</div>
+                  <div class="legend-def">Pauses trading after losing this much of your balance in any 24-hour window. Default <b>10%</b>. Prevents runaway losses on bad days.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128683;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Consecutive Loss Limit</div>
+                  <div class="legend-def">Pauses trading after this many <b>losing trades in a row</b>. Default <b>5</b>. A streak of losses may signal bad market conditions &mdash; better to pause.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128683;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Unfilled Ratio</div>
+                  <div class="legend-def">Pauses if more than this fraction of your recent orders went <b>unfilled</b>. Default <b>0.5</b> (50%). High unfilled rates waste gas and signal thin liquidity.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#128270;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Unfilled Lookback</div>
+                  <div class="legend-def">How many recent orders to check for the unfilled-ratio calculation. Default <b>20</b>. Smaller values react faster; larger values are more stable.</div>
+                </div>
+              </div>
+
+              <div class="legend-item">
+                <div class="legend-icon">&#9200;</div>
+                <div class="legend-text">
+                  <div class="legend-term">Auto-Resume (minutes)</div>
+                  <div class="legend-def">If risk rails pause trading, it automatically resumes after this many minutes. Default <b>60</b>. Set to <b>0</b> for manual-only resume (you must unpause from the dashboard).</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# ── FAQ ── #}
+        <div class="card dual-section">
+          <div class="hd">
+            <h2>FAQ</h2>
+            <span class="hd-badge">common questions</span>
+          </div>
+          <div class="bd">
+            <details class="faq-item">
+              <summary class="faq-q">How does the bot actually predict?</summary>
+              <div class="faq-a">
+                It uses a <b>CNN-LSTM</b> neural network (convolutional + recurrent) with a LightGBM/LogisticRegression fallback.
+                It analyzes <b>42+ technical indicators</b> from recent BTC candles including
+                RSI, MACD, Bollinger Bands, stochastics, volume ratios, ADX, OBV, volatility regime, multi-timeframe returns, and time-of-day patterns.
+                The model retrains every hour on fresh data to stay current.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What is Polymarket?</summary>
+              <div class="faq-a">
+                <b>Polymarket</b> is a prediction market platform where you can bet on real-world outcomes.
+                This bot trades "SOL/BTC Up or Down in 15 minutes" markets. You buy <b>Yes</b> or <b>No</b> shares using USDC,
+                and if you're right, each share pays out $1. If you're wrong, you lose your bet.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">How much money do I need to start?</summary>
+              <div class="faq-a">
+                You can start with as little as <b>$10&ndash;20 USDC</b>. Set your max per trade to $2&ndash;5.
+                The bot trades small amounts frequently. You don't need a big bankroll to test it out.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">Can I lose money?</summary>
+              <div class="faq-a">
+                <b>Yes.</b> This is real trading. The model is not always right &mdash; a 55&ndash;60% win rate is typical.
+                You will have losing trades. The edge comes from trading <em>many</em> small bets where wins slightly outnumber losses.
+                <b>Never bet more than you can afford to lose.</b>
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What's a "window"?</summary>
+              <div class="faq-a">
+                A <b>window</b> is a 15-minute time block (e.g. 14:00&ndash;14:15 UTC). Each window has its own Polymarket market.
+                The bot places one trade per window. The countdown in "Live Trading" shows how much time is left in the current window.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">Why does it say "Training" sometimes?</summary>
+              <div class="faq-a">
+                Every hour, the model <b>retrains</b> on the latest BTC price data (last ~8,600 candles / 30 days). This takes 30&ndash;90 seconds.
+                During training, the signal pauses briefly. This is normal and ensures the model stays current.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What if the signal shows low confidence?</summary>
+              <div class="faq-a">
+                If confidence is below your <b>threshold</b> (set in the sidebar), the bot <b>skips</b> that window.
+                No trade is placed. This is a safety feature &mdash; it only trades when it's reasonably confident.
+                You'll see "skipped" in the trade log for those windows.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">How do I know if it's actually working?</summary>
+              <div class="faq-a">
+                Check the <b>Signal</b> card &mdash; the price and direction should update frequently (usually every <b>~15 seconds</b> between retrains).
+                The "updated X ago" timestamp tells you when the last prediction was generated.
+                In the <b>Trades</b> tab, you'll see logged trades with results (W/L/pending).
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">Why does Bet % clamp to 10% / 50% / 100%?</summary>
+              <div class="faq-a">
+                This is a safety rail to prevent accidental account blow-ups.
+                By default, Bet % is capped at <b>10%</b>. Enabling <b>High-risk</b> raises the cap to <b>50%</b>.
+                Enabling <b>Expert/UNSAFE</b> (typed confirmation) raises the cap to <b>100%</b>.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">Signal says UP/DOWN, but why did it place a different trade?</summary>
+              <div class="faq-a">
+                The Signal shows the model's <b>current opinion</b>. Trades are only attempted during the specific 5-minute window's trade time.
+                If a trade was placed, the Signal card also shows <b>Polymarket: order placed</b> and the trade direction for that window.
+                If the market wasn't available yet, confidence was below your threshold, or you were paused, it may show <b>skipped</b>.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What does "Reset Stats" do?</summary>
+              <div class="faq-a">
+                It clears all trade history, win/loss stats, and the equity chart. Useful if you've been testing and want a fresh start.
+                <b>This does not affect your wallet balance</b> &mdash; it only resets the dashboard's records.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">How do I withdraw profits?</summary>
+              <div class="faq-a">
+                Go to the <b>Advanced</b> section below. Enter the amount in USDC you want to withdraw, type "I understand" in the
+                confirmation field, and submit. USDC will be sent from your trading wallet to your personal wallet address (set during setup).
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What's the difference between Fixed $ and % of balance?</summary>
+              <div class="faq-a">
+                <b>Fixed $</b>: Every trade is the exact same amount (e.g. $5). Simple and predictable.<br>
+                <b>% of bal</b>: Each trade is a percentage of your current wallet balance (e.g. 5% of $100 = $5).
+                As you win, bets grow. As you lose, bets shrink. This is sometimes called "Kelly-style" sizing.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What is Kelly (fractional) bet sizing?</summary>
+              <div class="faq-a">
+                <b>Kelly sizing</b> increases (or decreases) your bet size based on your estimated edge.
+                In this product, we use a simplified prediction-market version:
+                if your model probability is $p$ and the market price is $P$, then full Kelly is:
+                <span class="mono">F = (p - P) / (1 - P)</span> (only when <span class="mono">p &gt; P</span>).
+                <br><br>
+                Because the model can be wrong, we use <b>fractional Kelly</b>:
+                we multiply by <b>Kelly fraction</b> (default <b>0.25 = 1/4 Kelly</b>).
+                This is a practical risk control, not a profit guarantee.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">Is my wallet key safe?</summary>
+              <div class="faq-a">
+                Your private key is stored <b>only on your server</b> in the config folder. It never leaves
+                the machine. The bot uses it to sign Polymarket transactions. If you're running this on a remote
+                server, make sure it's secured (firewall, SSH keys, strong password).
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What is Snipe mode?</summary>
+              <div class="faq-a">
+                Snipe mode is a <b>separate, optional</b> trading strategy. Instead of predicting direction before the
+                5-minute window starts, snipe waits until the <b>last ~10 seconds</b> and checks whether BTC has
+                <em>already</em> moved up or down compared to the window open price.
+                <br><br>
+                <b>Why it works:</b> with only 10 seconds left, the direction is mostly locked in. If BTC is already
+                up +0.10% from the window open, it's ~85%+ likely to stay UP through resolution.
+                <br><br>
+                <b>Trade-off:</b> tokens cost more near close ($0.70&ndash;$0.95 instead of ~$0.50), so profit per
+                trade is smaller &mdash; but accuracy is much higher. Snipe runs as a <b>second pass</b> and won't
+                duplicate a trade the ML model already placed.
+                <br><br>
+                Enable it in the sidebar: <b>Trading &rarr; Snipe mode</b>.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What is Arb-first mode?</summary>
+              <div class="faq-a">
+                Arb-first (arbitrage-first) is a <b>high-confidence</b> strategy. It watches the Polymarket
+                orderbook and tries to buy <b>both UP and DOWN shares</b> when the combined cost is briefly
+                below <b>$1.00</b>.
+                <br><br>
+                <b>Example:</b> if UP costs $0.48 and DOWN costs $0.49, that's $0.97 total. Since one side
+                <em>must</em> pay out $1.00, you lock in ~$0.03 profit per dollar spent, regardless of the outcome.
+                <br><br>
+                These opportunities are rare and short-lived. The bot watches for them automatically when enabled.
+                <br><br>
+                Enable it in the sidebar: <b>Trading &rarr; Arb-first</b>. The <b>Min edge (cents)</b> control
+                sets how big the discount must be before trading (higher = fewer but safer trades).
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What is USDC?</summary>
+              <div class="faq-a">
+                <b>USDC</b> (USD Coin) is a <b>stablecoin</b> cryptocurrency pegged 1:1 to the US Dollar.
+                $5 USDC = $5 USD. It's what Polymarket uses for trading.
+                <br><br>
+                To fund your bot, you need to <b>deposit USDC onto the Polygon network</b> into your trading
+                wallet address. You can buy USDC on exchanges like Coinbase, Kraken, or Binance, then withdraw
+                to Polygon.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What is Polygon? What is gas / POL / MATIC?</summary>
+              <div class="faq-a">
+                <b>Polygon</b> is the blockchain network that Polymarket runs on. Think of it as the
+                "highway" your trades travel on.
+                <br><br>
+                <b>Gas</b> is a small fee you pay to use the network (like a toll). The gas token is
+                called <b>POL</b> (formerly MATIC). You need a tiny amount (~$1&ndash;$3 worth) in your
+                wallet to pay for trade confirmations and redemptions.
+                <br><br>
+                If you see a <b>"Low gas"</b> warning, send a small amount of POL/MATIC to your bot wallet
+                address. You can buy it on most crypto exchanges.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What is a private key? Is it safe to paste it?</summary>
+              <div class="faq-a">
+                A <b>private key</b> is like the master password to a crypto wallet. Whoever has it can spend
+                the funds inside. That's why you should:
+                <br><br>
+                <b>1.</b> Use a <b>dedicated bot wallet</b> &mdash; never paste the key for your main wallet.<br>
+                <b>2.</b> Only put small amounts ($10&ndash;50) in the bot wallet to start.<br>
+                <b>3.</b> The key stays <b>only on your server</b> &mdash; it is never sent anywhere.<br>
+                <b>4.</b> Get your Polymarket wallet key from
+                <a href="https://reveal.magic.link/polymarket" target="_blank" rel="noopener">reveal.magic.link/polymarket</a>.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">How do I fund my bot wallet with USDC?</summary>
+              <div class="faq-a">
+                <b>Step 1:</b> Find your bot wallet address (shown in the dashboard sidebar or in the Setup Wizard).<br>
+                <b>Step 2:</b> Buy USDC on an exchange (Coinbase, Kraken, Binance, etc.).<br>
+                <b>Step 3:</b> Withdraw USDC to your bot wallet address on the <b>Polygon network</b>.
+                <span class="danger">Make sure you select Polygon, NOT Ethereum</span> &mdash; sending to the wrong
+                network means lost funds.<br>
+                <b>Step 4:</b> Also send ~$1&ndash;$3 worth of <b>POL/MATIC</b> (gas token) to the same address.<br>
+                <b>Step 5:</b> The bot will see the balance automatically within a minute or two.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">Docker says "permission denied" or won't start</summary>
+              <div class="faq-a">
+                <b>Windows:</b> Make sure <b>Docker Desktop</b> is installed and running (check the system tray
+                for the whale icon). If it says "Docker daemon is not running", open Docker Desktop and wait
+                for it to fully start.<br><br>
+                <b>Linux:</b> You may need to add your user to the docker group:
+                <span class="mono">sudo usermod -aG docker $USER</span>, then log out and back in.<br><br>
+                <b>Mac:</b> Same as Windows &mdash; ensure Docker Desktop is installed from
+                <a href="https://docker.com/products/docker-desktop/" target="_blank" rel="noopener">docker.com</a> and running.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">The dashboard won't load / I get "connection refused"</summary>
+              <div class="faq-a">
+                <b>1.</b> Is the container running? Check: <span class="mono">docker ps</span> &mdash; you should see
+                <span class="mono">crypto5min-polytrader</span> in the list.<br>
+                <b>2.</b> Is the port correct? Default is <b>8602</b>. Visit
+                <span class="mono">http://YOUR_SERVER_IP:8602</span>.<br>
+                <b>3.</b> Firewall: make sure port 8602 is open on your server. On a VPS, check your hosting
+                provider's firewall rules.<br>
+                <b>4.</b> If using Docker Desktop locally, try <span class="mono">http://localhost:8602</span>.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">Why does the bot skip some windows?</summary>
+              <div class="faq-a">
+                The bot skips a 5-minute window when:
+                <br><br>
+                <b>1.</b> Confidence is below your threshold (e.g., model is only 52% sure but threshold is 55%).<br>
+                <b>2.</b> The cooldown hasn't expired since the last trade.<br>
+                <b>3.</b> The market couldn't be found on Polymarket (it may not exist yet for that window).<br>
+                <b>4.</b> Kelly sizing computed zero edge (model probability is below market price).<br>
+                <br>
+                Skipping is <b>normal and healthy</b> &mdash; it means the bot is being selective. You'll see
+                "skipped" with a reason in the trade log.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">Can I run this on my laptop instead of a server?</summary>
+              <div class="faq-a">
+                <b>Yes!</b> Install Docker Desktop on Windows or Mac. The bot runs inside a container, so
+                your laptop doesn't need Python or any special software beyond Docker.
+                <br><br>
+                <b>But:</b> if you close your laptop or it goes to sleep, the bot stops trading. For 24/7
+                operation, a cheap VPS ($5&ndash;10/month on Hetzner, DigitalOcean, etc.) is recommended.
+              </div>
+            </details>
+
+            {# ── v0.3.0 FAQ entries ── #}
+            <details class="faq-item">
+              <summary class="faq-q">What is the Chainlink oracle? Why does it matter?</summary>
+              <div class="faq-a">
+                Polymarket 15-minute markets resolve using the <b>Chainlink price feed</b> &mdash; a price feed
+                from a network of independent data providers. This is <b>different from Coinbase</b>.
+                <br><br>
+                <b>Why it matters:</b> In older versions, the bot only watched Coinbase prices to predict direction. But
+                Polymarket uses Chainlink to decide winner/loser. Even a $50 difference between Coinbase and Chainlink
+                at the 5-minute boundary could <b>flip the outcome</b>.
+                <br><br>
+                <b>What v0.3.0 does:</b> The bot now connects to Polymarket's free WebSocket and subscribes to the
+                <em>exact same Chainlink price data</em> that Polymarket uses. Snipe mode compares Chainlink open vs
+                Chainlink current &mdash; the exact same comparison Polymarket makes.
+                If the Chainlink feed is temporarily unavailable, it falls back to Coinbase (same as before).
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What are Risk Rails?</summary>
+              <div class="faq-a">
+                Risk Rails are <b>automated safety limits</b> (circuit breakers) that pause the bot when things go wrong.
+                They protect your capital while you're away from the dashboard.
+                <br><br>
+                There are four rails:
+                <br><b>1. Daily Loss Limit</b> &mdash; pauses after losing X% of your balance in 24 hours (default: 10%)<br>
+                <b>2. Consecutive Losses</b> &mdash; pauses after X losing trades in a row (default: 5)<br>
+                <b>3. Unfilled Ratio</b> &mdash; pauses if too many orders go unfilled (default: 50% of last 20 orders)<br>
+                <b>4. Auto-Resume</b> &mdash; automatically resumes after a pause period (default: 60 minutes)
+                <br><br>
+                All values are adjustable in the sidebar under <b>Risk Rails</b>. Set any value to <b>0</b> to disable that rail.
+                Risk state persists across restarts.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What happens when risk rails pause trading?</summary>
+              <div class="faq-a">
+                The bot <b>stops placing new trades</b> but keeps running &mdash; it still shows predictions, monitors prices,
+                and retrains the model. Existing orders are not affected.
+                <br><br>
+                You'll see a "paused" status on the dashboard. Trading resumes automatically after the <b>Auto-Resume</b>
+                period (default 60 minutes), or you can manually resume by clicking Resume.
+                <br><br>
+                Risk state is saved to <b>logs/risk_state.json</b> and persists across container restarts.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What is the Edge Gate?</summary>
+              <div class="faq-a">
+                The Edge Gate is an optional filter that blocks ML trades unless the model's probability minus the
+                market price is above a minimum threshold.
+                <br><br>
+                <b>Example:</b> If Edge Gate = 0.03, the model predicts 58% (p=0.58), and the market asks $0.56 (P=0.56),
+                edge = 0.02 &lt; 0.03 &rarr; trade <b>blocked</b>. If the market asks $0.54, edge = 0.04 &gt; 0.03 &rarr; trade <b>allowed</b>.
+                <br><br>
+                <b>Snipe trades bypass</b> the edge gate &mdash; they use their own delta-based threshold.
+                <br><br>
+                Set it in the sidebar under <b>Timing &amp; edge</b>. Recommended: <b>0.02&ndash;0.05</b> for conservative trading.
+                Set to <b>0</b> to disable (not recommended).
+              </div>
+            </details>
+
+            {# ── v0.4.0 FAQ entries ── #}
+            <details class="faq-item">
+              <summary class="faq-q">What is Ensemble Scoring?</summary>
+              <div class="faq-a">
+                In v0.4.0 the final Up/Down prediction is a <b>blend</b> of two signals:
+                <br><br>
+                <b>1. ML Model:</b> The trained CNN-LSTM or LightGBM model that looks at 40+ features over past candles.<br>
+                <b>2. Live Chainlink Delta:</b> The <em>actual</em> price movement from the Chainlink oracle since the 5-minute window opened.
+                <br><br>
+                The <b>Ensemble Weight</b> setting controls the blend: default <b>0.6</b> means 60% model + 40% Chainlink delta.
+                This way the bot trusts what it learned <em>and</em> what's happening right now.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What is Platt Calibration?</summary>
+              <div class="faq-a">
+                ML models often output <b>overconfident or underconfident</b> probabilities. Platt Calibration (actually
+                Isotonic Regression) adjusts the model's outputs so they match <em>real-world</em> outcomes.
+                <br><br>
+                <b>Before:</b> Model says 55% &rarr; actual win rate might be 48%.<br>
+                <b>After:</b> Model says 55% &rarr; actual win rate is ~55%.
+                <br><br>
+                This is <b>automatic</b> &mdash; it activates when the model has 30+ training samples.
+                No setting to toggle.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What is the Hybrid Training Target?</summary>
+              <div class="faq-a">
+                <b>Problem:</b> The model used to train on Coinbase candle data, but Polymarket resolves markets
+                using the <b>Chainlink oracle</b> &mdash; a different price feed. Small differences between them
+                could flip the outcome.
+                <br><br>
+                <b>Fix (v0.4.0):</b> When the bot has collected enough Chainlink history (10+ data points),
+                it switches the training target from Coinbase close to <b>Chainlink price changes</b>.
+                Now the model learns to predict what Polymarket actually measures.
+                <br><br>
+                This activates <b>automatically</b> as the bot runs. In the first few hours it may still use
+                Coinbase (not enough Chainlink data yet).
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What are Quiet Hours?</summary>
+              <div class="faq-a">
+                Optional UTC hours when the bot <b>skips ML trades</b>. Some hours have low
+                liquidity or unpredictable BTC behavior (e.g. 3&ndash;5 AM UTC).
+                <br><br>
+                Set in the sidebar under <b>Timing &amp; edge &rarr; Quiet Hours (UTC)</b>.
+                Enter comma-separated hours: <code>3,4,5</code> means 3:00&ndash;5:59 AM UTC.
+                <br><br>
+                <b>Snipe trades are never blocked</b> by quiet hours &mdash; they only fire on strong signals.
+                Leave blank to keep all hours active (default).
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">How do I update the bot?</summary>
+              <div class="faq-a">
+                Look at the <b>bottom-left</b> of the sidebar. You'll see your <b>current version</b> and a <b>Check</b> button.
+                <br><br>
+                <b>Option 1 (recommended):</b> Click the <b>&#8635; Check</b> button. If an update is available, a green banner
+                appears with release notes and an <b>"Apply Update"</b> button. Click it &mdash; the bot downloads and
+                installs the update, then restarts automatically.
+                <br><br>
+                <b>Option 2 (manual):</b> Download the latest ZIP from the Whop product page. Stop your container,
+                replace the files, rebuild, and restart:
+                <pre>docker compose down
+docker compose build --no-cache
+docker compose up -d</pre>
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-q">What does "basis" mean in the trade log?</summary>
+              <div class="faq-a">
+                <b>Basis</b> is the difference between the Coinbase price and the Chainlink oracle price at the time of a trade,
+                measured in <b>basis points</b> (1 bps = 0.01%).
+                <br><br>
+                <b>Example:</b> If Coinbase says $108,500 and Chainlink says $108,450, the basis is ~4.6 bps.
+                <br><br>
+                Small numbers are normal. Large divergences (&gt;10 bps) could indicate pricing anomalies.
+                This metric helps you monitor whether the two feeds are staying in sync.
+              </div>
+            </details>
+          </div>
+        </div>
+
+        {# ── Quick Reference ── #}
+        <div class="card dual-section">
+          <div class="hd">
+            <h2>Quick Reference</h2>
+            <span class="hd-badge">cheat sheet</span>
+          </div>
+          <div class="bd">
+            <div class="small">
+              <table>
+                <tbody>
+                  <tr><td class="nowrap muted w-160">Model</td><td>CNN-LSTM neural network (with LightGBM/LogReg fallback)</td></tr>
+                  <tr><td class="nowrap muted">Input</td><td>30 days of candles &times; 42+ features (RSI, MACD, Bollinger, stochastics, ADX, OBV, multi-timeframe returns, volatility regime, time-of-day, etc.)</td></tr>
+                  <tr><td class="nowrap muted">Candle size</td><td>5 minutes (from Coinbase)</td></tr>
+                  <tr><td class="nowrap muted">Retrain cycle</td><td>Every hour (60 min)</td></tr>
+                  <tr><td class="nowrap muted">Signal refresh</td><td>Every ~15 seconds between retrains (auto-refresh)</td></tr>
+                  <tr><td class="nowrap muted">Trade frequency</td><td>1 trade per 5-minute window (max)</td></tr>
+                  <tr><td class="nowrap muted">Market</td><td>BTC Up or Down 5m (Polymarket)</td></tr>
+                  <tr><td class="nowrap muted">Oracle</td><td>Chainlink BTC/USD Data Stream (via Polymarket RTDS WebSocket) &mdash; same oracle Polymarket uses to resolve markets</td></tr>
+                  <tr><td class="nowrap muted">Currency</td><td>USDC (equal to USD)</td></tr>
+                  <tr><td class="nowrap muted">ML win rate</td><td>~52&ndash;55% (prediction model, not guaranteed)</td></tr>
+                  <tr><td class="nowrap muted">Snipe win rate</td><td>~80&ndash;90%+ when triggered (observes price, not prediction)</td></tr>
+                  <tr><td class="nowrap muted">Bet % caps</td><td>10% (default) / 50% (High-risk) / 100% (Expert/UNSAFE)</td></tr>
+                  <tr><td class="nowrap muted">Risk rails</td><td>Daily loss 10% / consec 5 / unfilled 50% / auto-resume 60 min (all adjustable)</td></tr>
+                  <tr><td class="nowrap muted">Order type</td><td>Fill-or-Kill (FOK) market orders &mdash; instant fill at best price or cancel. Amounts auto-rounded to API precision. GTC retry as fallback.</td></tr>
+                  <tr><td class="nowrap muted">Edge gate</td><td>Default <b>0.03</b>. Set 0.02&ndash;0.05 for conservative ML filtering. Set 0 to disable.</td></tr>
+                  <tr><td class="nowrap muted">Ensemble weight</td><td>Default <b>0.6</b> (60% model + 40% Chainlink live delta)</td></tr>
+                  <tr><td class="nowrap muted">Calibration</td><td>Automatic (Isotonic Regression, activates at 30+ samples)</td></tr>
+                  <tr><td class="nowrap muted">Hybrid target</td><td>Automatic (trains on Chainlink when 10+ data points collected)</td></tr>
+                  <tr><td class="nowrap muted">Quiet hours</td><td>Off by default. Set UTC hours to skip ML trades (snipe unaffected).</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {# ── Advanced Operations ── #}
+        <div class="card dual-section">
+          <div class="hd">
+            <h2>Advanced</h2>
+            <span class="hd-badge danger">caution</span>
+          </div>
+          <div class="bd">
+
+            {# Redeem #}
+            <div class="small mb-10"><b>Redeem winnings</b> <span class="danger">(on-chain)</span></div>
+            <div class="small mb-10">
+              After markets resolve, winnings must be <b>redeemed</b> on-chain (Polygon) to return collateral.
+              This sends a transaction and costs gas. Auto-redeem is enabled by default (you can disable it).
+            </div>
+            <form id="redeemForm" class="form-compact">
+              <button type="submit">Preview redeem</button>
+            </form>
+            <form id="redeemConfirmForm" class="form-compact mt-8">
+              <input name="confirm" placeholder="Type: I understand" />
+              <button type="submit">Redeem now</button>
+            </form>
+            <div id="redeemResult" class="small mt-10 mono"></div>
+
+            <div class="hr mt-14"></div>
+
+            {# Gas top-up #}
+            <div class="small mb-10"><b>Top up gas</b> <span class="danger">(POL/MATIC)</span></div>
+            <div class="small mb-10">
+              If gas is low, redeems/withdrawals can fail.
+              <b>Easiest fix:</b> send ~$1–$3 worth of <span class="mono">POL/MATIC</span> to your bot wallet.
+              <span class="muted">This tool is optional/advanced: it can swap a small amount of USDC into gas, but it still needs a little gas already.</span>
+            </div>
+            <form id="gasTopupForm" class="form-compact">
+              <button type="submit">Preview gas top-up</button>
+            </form>
+            <form id="gasTopupConfirmForm" class="form-compact mt-8">
+              <input name="confirm" placeholder="Type: I understand" />
+              <button type="submit">Top up gas now</button>
+            </form>
+            <div id="gasTopupResult" class="small mt-10 mono"></div>
+
+            <script>
+              (function(){
+                var form = document.getElementById('gasTopupForm');
+                var cform = document.getElementById('gasTopupConfirmForm');
+                var out = document.getElementById('gasTopupResult');
+                if (!form || !cform || !out) return;
+                function post(url, data){
+                  return fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams(data||{}), credentials:'same-origin' })
+                    .then(function(r){ return r.text().then(function(txt){ try { return { ok:r.ok, json:JSON.parse(txt) }; } catch(e) { return { ok:false, json:{error:txt} }; } }); });
+                }
+                form.addEventListener('submit', function(ev){
+                  ev.preventDefault();
+                  out.textContent = 'Loading preview...';
+                  post('/gas/topup/preview', {}).then(function(res){
+                    if (!res.ok) { out.innerHTML = '<span class="danger">' + (res.json.error || 'Error') + '</span>'; return; }
+                    if (res.json.skipped) { out.innerHTML = '<span class="muted">No top-up needed.</span>'; return; }
+                    if (!res.json.ok) { out.innerHTML = '<span class="danger">' + (res.json.hint || res.json.error || 'Cannot top up') + '</span>'; return; }
+                    var usdc = res.json.estimated_usdc;
+                    var need = res.json.need_native;
+                    out.innerHTML = '<span class="up">OK</span> need ~' + (need||0).toFixed(4) + ' ' + (res.json.native_symbol||'POL') + (usdc ? (' (est $' + Number(usdc).toFixed(2) + ' USDC)') : '');
+                  });
+                });
+                cform.addEventListener('submit', function(ev){
+                  ev.preventDefault();
+                  var confirm = (cform.querySelector('[name=confirm]').value||'').trim();
+                  if (confirm.toLowerCase() !== 'i understand') { out.textContent = 'Type "I understand" to confirm.'; return; }
+                  out.textContent = 'Submitting...';
+                  post('/gas/topup/confirm', { confirm: 'I understand' }).then(function(res){
+                    if (res.ok && res.json.ok) {
+                      out.innerHTML = '<span class="up">OK</span> swap tx: <span class="clip">' + (res.json.swap_tx_hash||'') + '</span>';
+                      if (res.json.approve_tx_hash) out.innerHTML += '<br><span class="muted">approve:</span> <span class="clip">' + res.json.approve_tx_hash + '</span>';
+                    } else {
+                      out.innerHTML = '<span class="danger">' + (res.json.hint || res.json.error || 'Failed') + '</span>';
+                      if (res.json.detail) out.innerHTML += '<br><span class="muted">' + JSON.stringify(res.json.detail).slice(0, 300) + '</span>';
+                    }
+                  });
+                });
+              })();
+            </script>
+
+            <script>
+              (function(){
+                var form = document.getElementById('redeemForm');
+                var cform = document.getElementById('redeemConfirmForm');
+                var out = document.getElementById('redeemResult');
+                if (!form || !cform || !out) return;
+                function post(url, data){
+                  return fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams(data||{}), credentials:'same-origin' })
+                    .then(function(r){ return r.text().then(function(txt){ try { return { ok:r.ok, json:JSON.parse(txt) }; } catch(e) { return { ok:false, json:{error:txt} }; } }); });
+                }
+                form.addEventListener('submit', function(ev){
+                  ev.preventDefault();
+                  out.textContent = 'Loading preview...';
+                  post('/poly/redeem/preview', {}).then(function(res){
+                    if (!res.ok) { out.innerHTML = '<span class="danger">' + (res.json.error || 'Error') + '</span>'; return; }
+                    var c = (res.json.candidates || []);
+                    var enabled = !!res.json.enabled;
+                    if (!enabled) {
+                      out.innerHTML = '<span class="danger">Auto-redeem is OFF</span>. Turn it on in the sidebar (Trading → Auto-redeem).';
+                      if (c.length) out.innerHTML += '<br><span class="muted">Found ' + c.length + ' win(s) eligible.</span>';
+                      return;
+                    }
+                    if (!c.length) { out.innerHTML = '<span class="muted">Nothing to redeem right now.</span>'; return; }
+                    out.innerHTML = '<span class="up">Eligible wins:</span> ' + c.length + '<br>' + c.slice(0,8).map(function(x){ return '<span class="clip">' + (x.window_slug||'') + '</span>'; }).join('<br>');
+                  });
+                });
+                cform.addEventListener('submit', function(ev){
+                  ev.preventDefault();
+                  var confirm = (cform.querySelector('[name=confirm]').value||'').trim();
+                  if (confirm.toLowerCase() !== 'i understand') { out.textContent = 'Type "I understand" to confirm.'; return; }
+                  out.textContent = 'Redeeming...';
+                  post('/poly/redeem/confirm', { confirm: 'I understand' }).then(function(res){
+                    if (!res.ok) { out.innerHTML = '<span class="danger">' + (res.json.error || 'Failed') + '</span>'; return; }
+                    out.innerHTML = '<span class="up">OK</span> redeemed: ' + (res.json.count || 0);
+                  });
+                });
+              })();
+            </script>
+
+            <div class="hr mt-14"></div>
+
+            {# Withdraw #}
+            {% if withdraw_cfg and withdraw_cfg.enabled %}
+              <div class="small mb-10"><b>Withdraw funds</b></div>
+              <div class="small mb-10">Send USDC from your trading wallet to your personal wallet.</div>
+              <div class="kpi mb-10">
+                <div class="metric">
+                  <div class="label">To address</div>
+                  <div class="value mono fs-11 clip">{{ withdraw_cfg.to_address }}</div>
+                </div>
+                <div class="metric">
+                  <div class="label">Max per tx</div>
+                  <div class="value mono">${{ '%.0f'|format(withdraw_cfg.max_usdc) }}</div>
+                </div>
+              </div>
+
+              <form id="withdrawForm" class="form-compact">
+                <input name="amount_usdc" placeholder="Amount USDC (e.g. 10)" />
+                <input name="confirm" placeholder="Type: I understand" />
+                <button type="submit">Withdraw</button>
+              </form>
+              <div id="withdrawResult" class="small mt-10 mono"></div>
+
+              <script>
+                (function(){
+                  var form = document.getElementById('withdrawForm');
+                  var out = document.getElementById('withdrawResult');
+                  if (!form || !out) return;
+                  function post(url, data){
+                    return fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams(data), credentials:'same-origin' })
+                      .then(function(r){ return r.text().then(function(txt){ try { return { ok:r.ok, json:JSON.parse(txt) }; } catch(e) { return { ok:false, json:{error:txt} }; } }); });
+                  }
+                  form.addEventListener('submit', function(ev){
+                    ev.preventDefault();
+                    var amount = (form.querySelector('[name=amount_usdc]').value||'').trim();
+                    var confirm = (form.querySelector('[name=confirm]').value||'').trim();
+                    if (!amount || parseFloat(amount) <= 0) { out.textContent = 'Enter an amount.'; return; }
+                    out.textContent = 'Checking...';
+                    post('/withdraw/preview', { amount_usdc: amount }).then(function(prev){
+                      if (!prev.ok) { out.innerHTML = '<span class="danger">' + (prev.json.error || 'Error') + '</span>'; return; }
+                      if (confirm.toLowerCase() !== 'i understand') { out.textContent = 'Preview OK: $' + amount + '. Type "I understand" to confirm.'; return; }
+                      out.textContent = 'Sending...';
+                      post('/withdraw/confirm', { amount_usdc: amount, confirm: 'I understand' }).then(function(conf){
+                        if (conf.ok) { out.innerHTML = '<span class="up">OK Sent $' + amount + '</span> tx: <span class="clip">' + (conf.json.tx_hash||'') + '</span>'; }
+                        else { out.innerHTML = '<span class="danger">' + (conf.json.error || 'Failed') + '</span>'; }
+                      });
+                    });
+                  });
+                })();
+              </script>
+
+              <div class="hr mt-14"></div>
+
+              <div class="small mb-10"><b>Withdraw all</b> <span class="danger">(capped at ${{ '%.0f'|format(withdraw_cfg.max_usdc) }})</span></div>
+              <form id="withdrawAllForm" class="form-compact">
+                <input name="confirm" placeholder="Type: I understand" />
+                <button type="submit">Withdraw all</button>
+              </form>
+              <div id="withdrawAllResult" class="small mt-10 mono"></div>
+              <script>
+                (function(){
+                  var form = document.getElementById('withdrawAllForm');
+                  var out = document.getElementById('withdrawAllResult');
+                  if (!form || !out) return;
+                  function post(url,data){ return fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data||{}),credentials:'same-origin'}).then(function(r){return r.text().then(function(t){try{return{ok:r.ok,json:JSON.parse(t)};}catch(e){return{ok:false,json:{error:t}};}});}); }
+                  form.addEventListener('submit', function(ev){
+                    ev.preventDefault();
+                    var confirm = (form.querySelector('[name=confirm]').value||'').trim();
+                    out.textContent = 'Checking...';
+                    post('/withdraw/all/preview', {}).then(function(prev){
+                      if (!prev.ok) { out.innerHTML = '<span class="danger">'+(prev.json.error||'Error')+'</span>'; return; }
+                      if (confirm.toLowerCase() !== 'i understand') { out.textContent = 'Preview OK. Type "I understand" to confirm.'; return; }
+                      out.textContent = 'Sending...';
+                      post('/withdraw/all/confirm', { confirm:'I understand' }).then(function(conf){
+                        if (conf.ok) { out.innerHTML = '<span class="up">OK Sent $'+(conf.json.sent_usdc||0)+'</span>'; } else { out.innerHTML = '<span class="danger">'+(conf.json.error||'Failed')+'</span>'; }
+                      });
+                    });
+                  });
+                })();
+              </script>
+
+              <div class="hr mt-14"></div>
+            {% endif %}
+
+            <div class="small mb-10"><b>Sell all positions</b> <span class="danger">(emergency)</span></div>
+            <form id="sellAllForm" class="form-compact">
+              <input name="confirm" placeholder="Type: SELL ALL" />
+              <button type="submit">Sell all</button>
+            </form>
+            <div id="sellAllResult" class="small mt-10 mono"></div>
+            <script>
+              (function(){
+                var form = document.getElementById('sellAllForm');
+                var out = document.getElementById('sellAllResult');
+                if (!form || !out) return;
+                form.addEventListener('submit', function(ev){
+                  ev.preventDefault();
+                  var confirm = (form.querySelector('[name=confirm]').value||'').trim();
+                  out.textContent = 'Submitting...';
+                  fetch('/poly/sell_all', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({confirm:confirm}), credentials:'same-origin' })
+                    .then(function(r){ return r.text(); })
+                    .then(function(txt){ var json; try { json = JSON.parse(txt); } catch(e) { json = {raw:txt}; } out.textContent = JSON.stringify(json, null, 2); })
+                    .catch(function(e){ out.textContent = String(e); });
+                });
+              })();
+            </script>
+
+            {% if not withdraw_cfg or not withdraw_cfg.enabled %}
+              <div class="hr mt-14"></div>
+              <div class="small">
+                Withdraw is not set up yet. <a href="/reconfigure">Re-run the setup wizard</a> to add your personal wallet address.
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /main-content -->
+  </div><!-- /dashboard-layout -->
+
+  <!-- Tab switching -->
+  <script>
+    (function(){
+      var btns = document.querySelectorAll('.tab-btn');
+      var panels = document.querySelectorAll('.tab-panel');
+      btns.forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var target = btn.getAttribute('data-tab');
+          btns.forEach(function(b){ b.classList.remove('active'); });
+          panels.forEach(function(p){ p.classList.remove('active'); });
+          btn.classList.add('active');
+          var panel = document.getElementById(target);
+          if (panel) panel.classList.add('active');
+        });
+      });
+    })();
+  </script>
+
+  
+  <!-- updater removed in fork -->
+
+
+  <!-- Live countdown (Countdown Live Fix) -->
+  <script>
+    // Countdown in the Live Trading card is swapped in via HTMX.
+    // Browsers do not execute <script> tags that arrive inside the swapped fragment,
+    // so we (re)start the countdown after each swap.
+    (function(){
+      function fmt(s){
+        s = Math.max(0, (s|0));
+        var m = Math.floor(s/60);
+        var ss = String(s%60).padStart(2,'0');
+        return m + ':' + ss;
+      }
+
+      function startLiveCountdownFromData(){
+        var el = document.getElementById('windowCountdown');
+        if (!el) return;
+        var bar = document.getElementById('windowBar');
+        var nextTxt = document.getElementById('nextTradeText');
+
+        var rem = parseInt(el.getAttribute('data-rem') || '0', 10);
+        var total = parseInt(el.getAttribute('data-total') || '900', 10);
+        if (!isFinite(rem)) rem = 0;
+        if (!isFinite(total) || total <= 0) total = 900;
+
+        if (window.__ptLiveCountdownIv) {
+          clearInterval(window.__ptLiveCountdownIv);
+          window.__ptLiveCountdownIv = null;
+        }
+
+        function render(){
+          el.textContent = fmt(rem);
+          el.setAttribute('data-rem', String(rem));
+          if (nextTxt) {
+            nextTxt.textContent = 'next trade in ~' + rem + 's';
+            nextTxt.setAttribute('data-rem', String(rem));
+          }
+          if (bar) {
+            var pct = ((total - rem) / total) * 100;
+            pct = Math.max(0, Math.min(100, pct));
+            bar.style.width = pct.toFixed(1) + '%';
+            bar.setAttribute('data-rem', String(rem));
+            bar.setAttribute('data-total', String(total));
+          }
+        }
+
+        render();
+        window.__ptLiveCountdownIv = setInterval(function(){
+          rem = rem - 1;
+          if (rem < 0) rem = 0;
+          render();
+          if (rem <= 0) {
+            clearInterval(window.__ptLiveCountdownIv);
+            window.__ptLiveCountdownIv = null;
+          }
+        }, 1000);
+      }
+
+      // ── Learning Phase countdown ticker ─────────────────────────────────────
+      function startLearningPhaseCountdown() {
+        var cdEl   = document.getElementById('lpCountdown');
+        var fillEl = document.getElementById('lpFill');
+        var dotEl  = document.getElementById('lpDot');
+        var tagEl  = document.getElementById('lpTag');
+        var statusEl = document.getElementById('lpStatus');
+        var lastTimeEl = document.getElementById('lpLastTime');
+        if (!cdEl) return;
+
+        var lastTs   = parseInt(cdEl.getAttribute('data-last')   || '0', 10);
+        var interval = parseInt(cdEl.getAttribute('data-interval') || '1800', 10);
+        if (!lastTs || !interval) return;
+
+        if (lastTimeEl) {
+          // Show human time of last retrain
+          var d = new Date(lastTs * 1000);
+          lastTimeEl.textContent = d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+        }
+
+        if (window.__ptLPIv) { clearInterval(window.__ptLPIv); window.__ptLPIv = null; }
+
+        function renderLP() {
+          var now   = Math.floor(Date.now() / 1000);
+          var elapsed = now - lastTs;
+          var rem   = Math.max(0, interval - elapsed);
+          var pct   = Math.min(100, (elapsed / interval) * 100);
+
+          // Countdown text
+          var m = Math.floor(rem / 60), s = rem % 60;
+          cdEl.textContent = m + ':' + String(s).padStart(2,'0');
+
+          // Progress bar
+          if (fillEl) fillEl.style.width = pct.toFixed(1) + '%';
+
+          // Determine if currently in training window (status=running from state)
+          var isTraining = document.querySelector && document.querySelector('[data-training="1"]');
+
+          // Within last 10% = imminent; dot pulses gold; tag says "retraining soon"
+          if (rem === 0 || isTraining) {
+            if (dotEl) { dotEl.classList.remove('idle'); dotEl.classList.add('active'); }
+            if (tagEl) { tagEl.textContent = rem === 0 ? 'retraining…' : 'running'; tagEl.className = 'tag warn tag-sm'; }
+            if (statusEl) statusEl.textContent = 'model updating';
+          } else if (pct >= 90) {
+            if (dotEl) { dotEl.classList.remove('idle'); dotEl.classList.add('active'); }
+            if (tagEl) { tagEl.textContent = 'retraining soon'; tagEl.className = 'tag warn tag-sm'; }
+            if (statusEl) statusEl.textContent = 'almost time to retrain';
+          } else {
+            if (dotEl) { dotEl.classList.remove('active'); dotEl.classList.add('idle'); }
+            if (tagEl) { tagEl.textContent = 'active'; tagEl.className = 'tag live tag-sm'; }
+            if (statusEl) statusEl.textContent = 'model stable';
+          }
+        }
+
+        renderLP();
+        window.__ptLPIv = setInterval(function() {
+          var cdEl2 = document.getElementById('lpCountdown');
+          if (!cdEl2) { clearInterval(window.__ptLPIv); window.__ptLPIv = null; return; }
+          renderLP();
+        }, 1000);
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
+      // ── Signal "updated X ago" live ticker ──────────────────────────────────
+      function fmtAgo(ts) {
+        var ago = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+        if (ago < 60)   return ago + 's ago';
+        if (ago < 3600) return Math.floor(ago / 60) + 'm ago';
+        return Math.floor(ago / 3600) + 'h ago';
+      }
+
+      function startSignalAgeCountdown() {
+        var el = document.getElementById('signalAge');
+        if (!el) return;
+        var ts = parseInt(el.getAttribute('data-ts') || '0', 10);
+        if (!ts || ts < 1e9) return;
+
+        if (window.__ptSignalAgeIv) { clearInterval(window.__ptSignalAgeIv); window.__ptSignalAgeIv = null; }
+
+        el.textContent = fmtAgo(ts);
+        window.__ptSignalAgeIv = setInterval(function() {
+          var el2 = document.getElementById('signalAge');
+          if (!el2) { clearInterval(window.__ptSignalAgeIv); window.__ptSignalAgeIv = null; return; }
+          el2.textContent = fmtAgo(ts);
+        }, 1000);
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
+      // ── Early Exit Monitor poller ────────────────────────────────────────────
+      function refreshEarlyExitMonitor() {
+        var wrap = document.getElementById('eeMonitorInner');
+        if (!wrap) return;
+        fetch('/api/early_exit_status', {credentials: 'same-origin'})
+          .then(function(r){ return r.ok ? r.json() : null; })
+          .then(function(d) {
+            if (!d || !d.ok) return;
+            if (!d.enabled) {
+              wrap.innerHTML = '<div class="small muted">Early exit is disabled.</div>';
+              return;
+            }
+            var html = '';
+            // Open positions
+            html += '<div class="small mb-8"><b>Monitoring ' + d.open_positions.length + ' open position' + (d.open_positions.length !== 1 ? 's' : '') + '</b></div>';
+            if (d.open_positions.length > 0) {
+              html += '<table><thead><tr><th>placed</th><th>dir</th><th>entry</th><th>bid</th><th>peak</th><th>trail stop</th><th class="down">SL floor</th><th>status</th></tr></thead><tbody>';
+              d.open_positions.forEach(function(p) {
+                var dirClass = p.direction === 'UP' ? 'up' : 'down';
+                var pnlClass = p.pnl_pct >= 0 ? 'up' : 'down';
+                var pnlStr = (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct + '%';
+                var status = '';
+                if (!p.trail_active) {
+                  status = '<span class="muted small">watching · needs +'+ p.trail_act_pct +'% to arm trail</span>';
+                } else {
+                  status = '<span class="up small">trail armed · stop $' + p.trail_stop + '</span>';
+                }
+                html += '<tr>';
+                html += '<td class="mono nowrap">' + p.placed_ts + '</td>';
+                html += '<td class="mono ' + dirClass + '">' + p.direction + '</td>';
+                html += '<td class="mono">$' + p.entry + '</td>';
+                html += '<td class="mono ' + pnlClass + '">$' + p.bid + ' <span style="font-size:10px">(' + pnlStr + ')</span></td>';
+                html += '<td class="mono up">$' + p.peak + '</td>';
+                html += '<td class="mono">' + (p.trail_active ? '$' + p.trail_stop : '—') + '</td>';
+                html += '<td class="mono down">$' + p.sl_floor + '</td>';
+                html += '<td>' + status + '</td>';
+                html += '</tr>';
+              });
+              html += '</tbody></table>';
+            } else {
+              html += '<div class="small muted mb-12">No open positions right now — next trade fill will appear here.</div>';
+            }
+            // History
+            html += '<div class="small mt-14 mb-8"><b>Exit history (last 20)</b></div>';
+            if (d.history.length > 0) {
+              html += '<table><thead><tr><th>time</th><th>dir</th><th>trigger</th><th>entry</th><th>exit bid</th><th>P&L</th></tr></thead><tbody>';
+              d.history.forEach(function(h) {
+                var dirClass = h.direction === 'UP' ? 'up' : 'down';
+                var trigTag = h.trigger === 'take_profit'
+                  ? '<span class="tag live tag-sm">TP exit</span>'
+                  : '<span class="tag warn tag-sm">SL exit</span>';
+                var pnlStr = h.pnl_pct !== null
+                  ? '<span class="mono ' + (h.pnl_pct >= 0 ? 'up' : 'down') + '">' + (h.pnl_pct >= 0 ? '+' : '') + h.pnl_pct + '%</span>'
+                  : '—';
+                html += '<tr>';
+                html += '<td class="mono nowrap">' + h.ts + '</td>';
+                html += '<td class="mono ' + dirClass + '">' + h.direction + '</td>';
+                html += '<td>' + trigTag + '</td>';
+                html += '<td class="mono">$' + h.entry + '</td>';
+                html += '<td class="mono">$' + h.bid + '</td>';
+                html += '<td>' + pnlStr + '</td>';
+                html += '</tr>';
+              });
+              html += '</tbody></table>';
+            } else {
+              html += '<div class="small muted">No early exits yet. Will appear here when a TP or SL threshold is hit.</div>';
+            }
+            wrap.innerHTML = html;
+          })
+          .catch(function(){});
+      }
+
+      function refreshLearningStatus() {
+        fetch('/api/learning_status', {credentials: 'same-origin'})
+          .then(function(r){ return r.ok ? r.json() : null; })
+          .then(function(d) {
+            if (!d || !d.ok) return;
+            window._lastLearningData = d;  // cache it
+            window.renderLearningStatus(d);
+          })
+          .catch(function(){});
+      }
+
+      // Re-render from cache when symbol switches (instant, no extra fetch)
+      window.rerenderLearningForSymbol = function() {
+        if (window._lastLearningData) window.renderLearningStatus(window._lastLearningData);
+        else window.refreshLearningStatus();
+      };
+      // ─────────────────────────────────────────────────────────────────────────
+
+      // ── Per-Asset Learning Phase poller ─────────────────────────────────────
+      window._lastLearningData = null;  // cache last API response
+
+      window.renderLearningStatus = function renderLearningStatus(d) {
+            if (!d || !d.ok) return;
+
+            var fillEl    = document.getElementById('lpLearnFill');
+            var dotEl     = document.getElementById('lpLearnDot');
+            var tagEl     = document.getElementById('lpLearnTag');
+            var progEl    = document.getElementById('lpLearnProgress');
+            var detailEl  = document.getElementById('lpLearnDetail');
+            if (!fillEl) return;
+
+            // Show data for the currently selected symbol
+            var syms = Object.keys(d.symbols || {});
+            if (!syms.length) return;
+
+            // Use active symbol if available, otherwise primary
+            var _activeSym = window._activeSymbol || '';
+            var sym = (_activeSym && d.symbols[_activeSym]) ? _activeSym : syms[0];
+            var s = d.symbols[sym];
+            if (!s) return;
+
+            var n       = s.resolved_filled || 0;
+            var min     = s.min_trades || 12;
+            var ready   = s.ready;
+            var wr      = s.win_rate;
+            var sugg    = s.suggestion;
+            var applied = s.applied_threshold;
+
+            // Progress bar
+            var pct = Math.min(100, (n / min) * 100);
+            fillEl.style.width = pct.toFixed(0) + '%';
+
+            // Progress text
+            if (progEl) progEl.textContent = n + ' / ' + min + ' trades';
+
+            if (!ready) {
+              // Still collecting data
+              var need = min - n;
+              dotEl.style.background = 'rgba(94,129,244,0.6)';
+              dotEl.style.boxShadow = '0 0 0 3px rgba(94,129,244,0.12)';
+              tagEl.textContent = 'collecting data';
+              tagEl.style.color = 'rgba(94,129,244,0.9)';
+              tagEl.style.borderColor = 'rgba(94,129,244,0.3)';
+              tagEl.style.background = 'rgba(94,129,244,0.12)';
+              if (detailEl) detailEl.textContent = 'Need ' + need + ' more resolved filled trade' + (need !== 1 ? 's' : '') + ' before a threshold suggestion is available.';
+            } else if (sugg && applied && Math.abs(sugg.confidence_threshold - applied) < 0.001) {
+              // Suggestion applied and up to date
+              dotEl.style.background = 'rgba(52,199,89,0.95)';
+              dotEl.style.boxShadow = '0 0 0 3px rgba(52,199,89,0.15)';
+              tagEl.textContent = 'tuned';
+              tagEl.style.color = 'rgba(52,199,89,0.9)';
+              tagEl.style.borderColor = 'rgba(52,199,89,0.3)';
+              tagEl.style.background = 'rgba(52,199,89,0.1)';
+              var wrPct = wr != null ? ' · win rate ' + (wr * 100).toFixed(1) + '%' : '';
+              if (detailEl) detailEl.textContent = sym + ' · threshold ' + applied + ' applied from ' + sugg.sample + ' trades' + wrPct + '. Click Auto-apply to refresh.';
+            } else if (sugg && !applied) {
+              // Ready but not yet applied
+              dotEl.style.background = 'rgba(255,204,0,0.95)';
+              dotEl.style.boxShadow = '0 0 0 3px rgba(255,204,0,0.15)';
+              tagEl.textContent = 'suggestion ready';
+              tagEl.style.color = 'rgba(255,204,0,0.9)';
+              tagEl.style.borderColor = 'rgba(255,204,0,0.3)';
+              tagEl.style.background = 'rgba(255,204,0,0.1)';
+              var wrPct2 = wr != null ? ' · win rate ' + (wr * 100).toFixed(1) + '%' : '';
+              if (detailEl) detailEl.textContent = 'Suggested threshold: ' + sugg.confidence_threshold + ' (from ' + sugg.sample + ' trades' + wrPct2 + '). Hit Auto-apply in Per-Asset Tuning to use it.';
+            } else if (sugg && applied && Math.abs(sugg.confidence_threshold - applied) >= 0.001) {
+              // Applied but new suggestion differs
+              dotEl.style.background = 'rgba(255,149,0,0.95)';
+              dotEl.style.boxShadow = '0 0 0 3px rgba(255,149,0,0.15)';
+              tagEl.textContent = 'update available';
+              tagEl.style.color = 'rgba(255,149,0,0.9)';
+              tagEl.style.borderColor = 'rgba(255,149,0,0.3)';
+              tagEl.style.background = 'rgba(255,149,0,0.1)';
+              var wrPct3 = wr != null ? ' · win rate ' + (wr * 100).toFixed(1) + '%' : '';
+              if (detailEl) detailEl.textContent = 'New suggestion: ' + sugg.confidence_threshold + ' (currently ' + applied + '). ' + sugg.sample + ' trades' + wrPct3 + '. Hit Auto-apply to update.';
+            } else {
+              // Ready, no suggestion (edge case)
+              dotEl.style.background = 'rgba(94,129,244,0.9)';
+              tagEl.textContent = 'ready';
+              if (detailEl) detailEl.textContent = sym + ' · ' + n + ' resolved trades · win rate ' + (wr != null ? (wr*100).toFixed(1)+'%' : '--');
+            }
+      };  // end window.renderLearningStatus
+      // ─────────────────────────────────────────────────────────────────────────
+
+      document.addEventListener('DOMContentLoaded', function(){ startLiveCountdownFromData(); startSignalAgeCountdown(); startLearningPhaseCountdown(); refreshLearningStatus(); refreshEarlyExitMonitor(); refreshMarketQualityAndLiquidityHeat(); });
+      document.addEventListener('htmx:afterSwap', function(evt){
+        var t = (evt && evt.detail && evt.detail.target) ? evt.detail.target : evt.target;
+        if (t && t.id === 'liveStatus') { startLiveCountdownFromData(); refreshMarketQualityAndLiquidityHeat(); }
+        if (t && t.id === 'signalState') { startSignalAgeCountdown(); startLearningPhaseCountdown(); refreshLearningStatus(); }
+      });
+
+      
+
+      function classifyMQ(mq){
+        // mq.ok is ideal, mq.skip means one of the MQ filters blocks fills.
+        if (!mq) return {badge:'Unknown', cls:'risk'};
+        if (mq.ok) return {badge:'Likely Fill', cls:'ok'};
+        if (mq.skip) return {badge:'Skip', cls:'skip'};
+        return {badge:'Risky', cls:'risk'};
+      }
+
+      async function refreshMarketQualityAndLiquidityHeat(){
+        // This second MQ refresh (for the Live Status section) is now a no-op —
+        // refreshMQ() in the chart script block handles all MQ UI updates.
+        // We keep this function to avoid breaking any existing call sites.
+        refreshMQ();
+      }
+window.startLiveCountdownFromData = startLiveCountdownFromData;
+      window.startSignalAgeCountdown = startSignalAgeCountdown;
+      window.startLearningPhaseCountdown = startLearningPhaseCountdown;
+      window.refreshLearningStatus = refreshLearningStatus;
+      window.refreshEarlyExitMonitor = refreshEarlyExitMonitor;
+
+      // ── Symbol Switcher ──────────────────────────────────────────────────────
+      // _activeSymbol already initialized early in the chart block above
+
+      window._trainedSymbols = {};  // track which symbols have been trained this session
+
+      window.switchSymbol = function(sym) {
+        window._activeSymbol = sym;
+        // Update button states
+        document.querySelectorAll('.sym-btn').forEach(function(b){
+          b.classList.toggle('active', b.getAttribute('data-symbol') === sym);
+        });
+        // Update hidden HTMX input
+        var inp = document.getElementById('activeSymbolInput');
+        if(inp) inp.value = sym;
+        // Update chart title
+        var title = document.getElementById('liveChartTitle');
+        if(title) title.textContent = sym;
+        // Flush chart data for new symbol
+        if(window.__chartPrices) { window.__chartPrices.length = 0; window.__chartLabels.length = 0; }
+        window.__chartFirstPrice = null;
+        var badge = document.getElementById('btcSpotBadge');
+        var change = document.getElementById('btcPriceChange');
+        if(badge) badge.textContent = '$--';
+        if(change) change.textContent = '--';
+        // Trigger on-demand retrain only if symbol has no state yet
+        var _sigEl = document.getElementById('signalState');
+        var _hasState = _sigEl && _sigEl.innerHTML.indexOf('signal-hero') !== -1;
+        if (!window._trainedSymbols[sym] && !_hasState) {
+          window._trainedSymbols[sym] = true;
+          var sigEl = document.getElementById('signalState');
+          if(sigEl) sigEl.innerHTML = '<div class="small muted" style="padding:1rem">Training model for ' + sym + '… this takes ~10-20s</div>';
+          fetch('/api/train_symbol?symbol=' + encodeURIComponent(sym), {
+            method: 'POST', credentials: 'same-origin'
+          })
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            if(d.ok) {
+              // Poll for signal every 3s for up to 30s until state appears
+              var attempts = 0;
+              var poller = setInterval(function(){
+                attempts++;
+                if(window._activeSymbol !== sym || attempts > 10) { clearInterval(poller); return; }
+                fetch('/p/state?symbol=' + encodeURIComponent(sym), {credentials:'same-origin'})
+                  .then(function(r){ return r.ok ? r.text() : null; })
+                  .then(function(html){
+                    if(!html) return;
+                    var el = document.getElementById('signalState');
+                    if(el && window._activeSymbol === sym) {
+                      el.innerHTML = html;
+                      clearInterval(poller);
+                    }
+                  });
+              }, 3000);
+            }
+          })
+          .catch(function(){});
+        }
+        // Trigger immediate refresh of all components
+        if(window.__refreshFn) window.__refreshFn();
+        if(window.refreshSignalCard) window.refreshSignalCard();
+        if(window.refreshLiveStatus) window.refreshLiveStatus();
+        // Re-render learning card for new symbol using cached data
+        if(window._lastLearningData && window.renderLearningStatus) window.renderLearningStatus(window._lastLearningData);
+        else if(window.refreshLearningStatus) window.refreshLearningStatus();
+        if(window.refreshEarlyExitMonitor) window.refreshEarlyExitMonitor();
+      };
+      window.refreshMarketQualityAndLiquidityHeat = refreshMarketQualityAndLiquidityHeat;
+
+    })();
+  </script>
+
+{% endblock %}

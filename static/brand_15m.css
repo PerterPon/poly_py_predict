@@ -1,0 +1,214 @@
+/* ============================================================
+   Crypto15min PolyTrader — 15m SWING BOT Theme (A + C)
+   - Distinct amber/gold accent
+   - Persistent top ribbon + watermark
+   - Strong sidebar identity
+   ============================================================ */
+
+:root{
+  --accent-15m: #d7b25a;      /* amber/gold */
+  --accent-15m-2: #b88a2a;    /* deeper gold */
+  --accent-15m-glow: rgba(215,178,90,.35);
+  --accent-15m-glow-2: rgba(184,138,42,.28);
+  --bg-warm-tint: rgba(215,178,90,.06);
+}
+
+/* Apply only when body has .theme-15m */
+body.theme-15m{
+  background:
+    radial-gradient(1200px 700px at 20% 10%, var(--bg-warm-tint), transparent 65%),
+    radial-gradient(900px 600px at 80% 0%, rgba(184,138,42,.05), transparent 65%),
+    radial-gradient(900px 600px at 60% 85%, rgba(215,178,90,.04), transparent 60%),
+    var(--bg, #0b0f12);
+}
+
+/* Top ribbon (structural cue) */
+.theme-15m .bot-ribbon{
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(215,178,90,.22);
+  background: linear-gradient(90deg, rgba(215,178,90,.18), rgba(215,178,90,.08) 40%, rgba(0,0,0,0) 100%);
+  backdrop-filter: blur(8px);
+}
+
+.theme-15m .bot-ribbon .pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(215,178,90,.14);
+  border: 1px solid rgba(215,178,90,.35);
+  color: #f2e7c9;
+  font-weight: 700;
+  letter-spacing: .4px;
+}
+
+.theme-15m .bot-ribbon .sub{
+  color: rgba(242,231,201,.78);
+  font-size: 12px;
+}
+
+/* Watermark */
+.theme-15m .main::before{
+  content: "15m";
+  position: fixed;
+  right: 26px;
+  bottom: 18px;
+  font-size: 110px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: rgba(215,178,90,.06);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Sidebar identity */
+.theme-15m .sidebar{
+  border-right: 2px solid rgba(215,178,90,.22);
+  box-shadow: 0 0 0 1px rgba(215,178,90,.08), 0 0 30px rgba(215,178,90,.06);
+}
+
+.theme-15m .sidebar .brand-badge{
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(215,178,90,.10);
+  border: 1px solid rgba(215,178,90,.28);
+  color: #f2e7c9;
+  font-weight: 700;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Accent swaps */
+.theme-15m a:hover,
+.theme-15m .tab.active,
+.theme-15m .nav .active{
+  color: var(--accent-15m) !important;
+}
+
+.theme-15m .btn-primary,
+.theme-15m button.primary{
+  border-color: rgba(215,178,90,.45) !important;
+  box-shadow: 0 0 0 2px rgba(215,178,90,.12), 0 10px 30px rgba(215,178,90,.10) !important;
+}
+
+.theme-15m .btn-primary:hover,
+.theme-15m button.primary:hover{
+  box-shadow: 0 0 0 2px rgba(215,178,90,.18), 0 12px 36px rgba(215,178,90,.14) !important;
+}
+
+.theme-15m .pill-live,
+.theme-15m .badge-live{
+  border-color: rgba(215,178,90,.55) !important;
+  box-shadow: 0 0 12px rgba(215,178,90,.15) !important;
+}
+
+/* Make the selected tab underline glow amber if present */
+.theme-15m .tabs .active::after,
+.theme-15m .tabs .active{
+  border-color: rgba(215,178,90,.55) !important;
+  box-shadow: 0 0 20px var(--accent-15m-glow) !important;
+}
+
+/* Distinct focus ring */
+.theme-15m input:focus,
+.theme-15m select:focus,
+.theme-15m textarea:focus{
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(215,178,90,.22) !important;
+  border-color: rgba(215,178,90,.55) !important;
+}
+
+
+/* ============================
+   v0.6.8 Distinctness Boost
+   - Works even if class names differ
+   ============================ */
+
+body.theme-15m{
+  --accent: var(--accent-15m);
+}
+
+/* Strong gold rail on the far-left to instantly distinguish */
+body.theme-15m::before{
+  content:"";
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: 8px;
+  background: linear-gradient(180deg, rgba(215,178,90,.75), rgba(184,138,42,.55));
+  box-shadow: 0 0 24px rgba(215,178,90,.25);
+  z-index: 9998;
+  pointer-events: none;
+}
+
+/* Make the left sidebar visually different even if it isn't called .sidebar */
+body.theme-15m :is(aside, nav, .sidebar, .sidenav, .left, .panel-left){
+  background:
+    radial-gradient(500px 500px at 20% 20%, rgba(215,178,90,.12), transparent 60%),
+    radial-gradient(700px 500px at 40% 80%, rgba(184,138,42,.10), transparent 65%),
+    rgba(8,10,12,.92) !important;
+  border-right: 2px solid rgba(215,178,90,.28) !important;
+}
+
+/* Give cards a gold top stroke so the whole UI reads as "gold" */
+body.theme-15m :is(.card, .panel, .box, .tile, section, article, .content-card){
+  position: relative;
+}
+body.theme-15m :is(.card, .panel, .box, .tile, section, article, .content-card)::before{
+  content:"";
+  position:absolute;
+  left:0; right:0; top:0;
+  height:2px;
+  background: linear-gradient(90deg, rgba(215,178,90,.65), rgba(184,138,42,.25), rgba(0,0,0,0));
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  pointer-events:none;
+}
+
+/* Tabs: force active to gold with underline */
+body.theme-15m :is(.tabs a.active, .tabs .active, .tab.active, .nav a.active, .nav .active){
+  color: var(--accent-15m) !important;
+}
+body.theme-15m :is(.tabs a.active, .tab.active)::after{
+  background: var(--accent-15m) !important;
+}
+
+/* Buttons: gold outline */
+body.theme-15m :is(button, .btn){
+  border-color: rgba(215,178,90,.26);
+}
+body.theme-15m :is(button:hover, .btn:hover){
+  border-color: rgba(215,178,90,.45);
+}
+
+/* LIVE badge: gold */
+body.theme-15m :is(.live, .badge-live, .pill-live, .badge){
+  border-color: rgba(215,178,90,.55) !important;
+}
+
+/* Bigger watermark for instant ID */
+body.theme-15m .main::before{
+  content: "SWING";
+  font-size: 120px;
+  right: 24px;
+  bottom: 14px;
+  color: rgba(215,178,90,.055);
+}
+
+/* Sticky top ribbon: make it BIG and unmistakable */
+.theme-15m .bot-ribbon{
+  border-bottom: 2px solid rgba(215,178,90,.28) !important;
+}
+.theme-15m .bot-ribbon .pill{
+  background: rgba(215,178,90,.18) !important;
+  border: 1px solid rgba(215,178,90,.48) !important;
+  box-shadow: 0 0 18px rgba(215,178,90,.16);
+}

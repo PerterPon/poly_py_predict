@@ -1,0 +1,23 @@
+{# Raw terminal logs panel (tail of logs/app.log) #}
+
+<div class="card">
+  <div class="hd">
+    <h2>Terminal</h2>
+    <div class="hd-badge mono">tail {{ lines or 0 }} lines</div>
+  </div>
+  <div class="bd">
+    <div class="small mb-10">
+      This is a raw tail of <span class="mono">logs/app.log</span>. Use it for debugging errors and seeing stack traces.
+      (If you need more history, SSH and inspect the full file.)
+    </div>
+
+    {% if warning %}
+      <div class="notice warn mb-12">
+        <div>{{ warning }}</div>
+        <span class="badge">log</span>
+      </div>
+    {% endif %}
+
+    <pre class="codebox">{{ content or '' }}</pre>
+  </div>
+</div>

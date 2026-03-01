@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block body %}
+  <div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <h1>{{ product }}</h1>
+      <div class="sub">login</div>
+    </div>
+  </div>
+
+  <div class="card mw-520">
+    <div class="hd"><h2>Enter password</h2><span class="mono gold">secure local session</span></div>
+    <div class="bd">
+      {% if error %}
+        <div class="small danger mb-10">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="/login">
+        <input name="password" type="password" placeholder="Dashboard password" title="Dashboard password" autocomplete="current-password" autofocus />
+        <button type="submit">Unlock</button>
+      </form>
+      <div class="small mt-12">
+        Tip: If you forgot the password, edit <span class="mono">config/.env</span> (or re-run Setup Wizard if this is a fresh install).
+      </div>
+    </div>
+  </div>
+  </div>
+{% endblock %}

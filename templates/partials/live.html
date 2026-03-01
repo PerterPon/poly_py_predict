@@ -1,0 +1,202 @@
+{% set snap = live.get('snapshot') %}
+
+{# ── Window Countdown ── #}
+<div class="kpi section-gap">
+  <div class="metric full">
+    {% set rem = live.get('window_seconds_remaining', 0) | int %}
+    {% set total = (live.get('window_seconds_total', None) or live.get('window_seconds', None) or 900) | int %}
+    <div class="window-row">
+      <div>
+        <div class="label">Current Window</div>
+        <div class="value mono fs-14">{{ live.get('window_slug', '') }}</div>
+      </div>
+      <div class="window-row-right">
+        <div class="label">Countdown</div>
+        <div id="windowCountdown" class="value mono gold countdown-big" data-rem="{{ rem }}" data-total="{{ total }}">
+          {{ '%d:%02d' | format(rem//60, rem%60) }}
+        </div>
+      </div>
+    </div>
+    <div class="progress-track">
+      {% set pct = ((total - rem) / (total if total>0 else 900) * 100) %}
+      <div id="windowBar" class="progress-fill" data-rem="{{ rem }}" data-total="{{ total }}" style="width: {{ pct|round(1) }}%;"></div>
+    </div>
+    <div class="small trade-zone-label">
+      {% if live.get('is_trade_time') %}
+        <span class="mono pulse up">● TRADE ZONE</span> — placing orders now
+      {% else %}
+        <span class="mono muted">○ waiting</span>
+        — <span id="nextTradeText" class="mono muted" data-rem="{{ rem }}">next trade in ~{{ rem }}s</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+
+{# ── Win/Loss Stats ── #}
+<div class="kpi section-gap">
+  <div class="metric">
+    <div class="label">Win Rate (filled)</div>
+    {% if live.get('total_filled', live.get('total_resolved', 0)) > 0 %}
+      <div class="value mono {% if live.get('win_rate',0) >= 50 %}up{% else %}down{% endif %}">{{ '%.1f'|format(live.get('win_rate', 0)) }}%</div>
+      <div class="small mt-6">{{ live.get('total_filled', live.get('total_resolved', 0)) }} filled trades</div>
+    {% else %}
+      <div class="value mono muted">—</div>
+      <div class="small mt-6">no filled trades yet</div>
+    {% endif %}
+  </div>
+  <div class="metric">
+    <div class="label">W / L (filled)</div>
+    <div class="value">
+      <span class="mono up">{{ live.get('wins', 0) }}</span>
+      <span class="mono muted"> / </span>
+      <span class="mono down">{{ live.get('losses', 0) }}</span>
+    </div>
+    <div class="small mt-6">{{ live.get('wins',0) + live.get('losses',0) }} filled</div>
+  </div>
+  {% if live.get('wins_unfilled', 0) + live.get('losses_unfilled', 0) > 0 %}
+  <div class="metric">
+    <div class="label">Unfilled</div>
+    <div class="value mono muted">{{ live.get('wins_unfilled', 0) + live.get('losses_unfilled', 0) }}</div>
+    <div class="small mt-6">orders not filled</div>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Execution Status ── #}
+<div class="kpi">
+  <div class="metric">
+    <div class="label">Execution</div>
+    {% if live.get('really_trading') %}
+      <div class="value"><span class="tag live">● LIVE</span></div>
+    {% elif live.get('enabled') and live.get('dry_run') %}
+      <div class="value"><span class="tag warn">◌ DRY-RUN</span></div>
+    {% elif live.get('enabled') %}
+      <div class="value"><span class="tag warn">◌ ENABLED</span></div>
+    {% else %}
+      <div class="value"><span class="tag off">— PAPER</span></div>
+    {% endif %}
+    <div class="small mt-6">
+      max <span class="mono">${{ '%.2f'|format(live.get('max_usdc_per_trade', 0)) }}</span> / trade
+    </div>
+  </div>
+
+  <div class="metric">
+    <div class="label">Market</div>
+    <div class="value mono fs-14">
+      {% if cfg and cfg.symbols and cfg.symbols|length > 1 %}
+        {{ cfg.symbols|map('replace', '-USD', '')|join(', ') }} Up/Down 15m
+      {% elif cfg and cfg.symbol %}
+        {{ cfg.symbol|replace('-USD', '') }} Up/Down 15m
+      {% else %}
+        BTC Up/Down 15m
+      {% endif %}
+    </div>
+    <div class="small mt-6">
+      key {% if live.get('has_key') %}<span class="mono up">present</span>{% else %}<span class="mono danger">missing</span>{% endif %}
+      · auto-slug
+    </div>
+  </div>
+
+  <div class="metric">
+    <div class="label">Account</div>
+    {% if snap %}
+      <div class="value mono gold">${{ '%.2f'|format(snap.get('total_equity_usdc', 0)) }}</div>
+      <div class="small mt-6">
+        bal <span class="mono">${{ '%.2f'|format(snap.get('clob_balance_usdc', 0)) }}</span> ·
+        pos <span class="mono">${{ '%.2f'|format(snap.get('positions_value_usdc', 0)) }}</span>
+      </div>
+      <div class="small">
+        gas <span class="mono">{{ snap.get('native_gas_symbol', 'POL') }}</span>
+        <span class="mono {% if snap.get('native_gas_balance', 0) >= live.get('native_gas_min', 0.15) %}up{% else %}danger{% endif %}">
+          {{ '%.4f'|format(snap.get('native_gas_balance', 0)) }}
+        </span>
+        {% if snap.get('native_gas_balance', 0) < live.get('native_gas_min', 0.15) %}
+          <span class="tag warn tag-sm">low</span>
+        {% endif %}
+      </div>
+      <div class="small">
+        P/L (since tracking)
+        {% if live.get('equity_delta_usdc') is not none %}
+          <span class="mono {% if live.get('equity_delta_usdc', 0) >= 0 %}up{% else %}down{% endif %}">
+            ${{ '%.2f'|format(live.get('equity_delta_usdc', 0)) }}
+          </span>
+          {% if live.get('equity_delta_pct') is not none %}
+            <span class="mono muted">({{ '%.2f'|format(live.get('equity_delta_pct', 0)) }}%)</span>
+          {% endif %}
+        {% else %}
+          <span class="mono muted">—</span>
+        {% endif %}
+        · open positions <span class="mono">{{ snap.get('active_positions', 0) }}</span>
+      </div>
+      <div class="small">
+        Position P/L (estimate)
+        <span class="mono {% if (snap.get('unrealized_pnl_usdc', 0) >= 0) %}up{% else %}down{% endif %}">
+          ${{ '%.2f'|format(snap.get('unrealized_pnl_usdc', 0)) }}
+        </span>
+        <span class="mono muted">· basis ${{ '%.2f'|format(snap.get('cost_basis_usdc', 0)) }}</span>
+      </div>
+    {% else %}
+      <div class="value mono muted">—</div>
+      <div class="small mt-6">No snapshot yet</div>
+    {% endif %}
+  </div>
+
+  <div class="metric">
+    <div class="label">Last trade</div>
+    {% set t = live.get('last_trade') %}
+    {% if t and t.get('ts') %}
+      <div class="value mono fs-14">{{ live.get('last_trade_iso', '')|replace('T',' ')|replace('+00:00','Z') }}</div>
+      <div class="small mt-6">
+        {% if t.get('dry_run') %}<span class="tag warn tag-sm">dry</span>{% else %}<span class="tag live tag-sm">live</span>{% endif %}
+        · <span class="mono">${{ '%.2f'|format(t.get('usdc', 0)) }}</span>
+        {% if t.get('direction') %}· <span class="mono">{{ t.get('direction') }}</span>{% endif %}
+      </div>
+      {% if t.get('window_slug') %}
+        <div class="small clip mono fs-11">{{ t.get('window_slug') }}</div>
+      {% endif %}
+    {% else %}
+      <div class="value mono muted">—</div>
+      <div class="small mt-6">No trade logged yet</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if not live.get('has_key') %}
+  <div class="small mt-12">
+    To connect your Polymarket account, <a href="/reconfigure">run the setup wizard</a> or add your wallet key in the settings.
+  </div>
+{% endif %}
+
+{# ── Market Quality (live orderbook health) ── #}
+<div class="kpi section-gap">
+  <div class="metric">
+    <div class="label">Market quality (UP)</div>
+    <div id="mqUpStatus" class="value mono muted">—</div>
+    <div class="small mt-6">
+      spread <span id="mqUpSpread" class="mono">—</span>
+      · depth <span id="mqUpDepth" class="mono">—</span>
+    </div>
+  </div>
+  <div class="metric">
+    <div class="label">Market quality (DOWN)</div>
+    <div id="mqDnStatus" class="value mono muted">—</div>
+    <div class="small mt-6">
+      spread <span id="mqDnSpread" class="mono">—</span>
+      · depth <span id="mqDnDepth" class="mono">—</span>
+    </div>
+  </div>
+  <div class="metric">
+    <div class="label">MQ thresholds</div>
+    <div id="mqThr" class="value mono fs-14 muted">—</div>
+    <div class="small mt-6">These come from Market quality + per-asset tuning.</div>
+  </div>
+  <div class="metric">
+    <div class="label">Per-asset tuning (active)</div>
+    <div class="value mono fs-14">{{ (cfg.symbol or 'BTC-USD') }}</div>
+    <div class="small mt-6">
+      Edit in the sidebar under <span class="mono">Per-asset tuning</span>.
+    </div>
+  </div>
+</div>
+

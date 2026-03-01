@@ -1,0 +1,83 @@
+{% if not trades or trades|length == 0 %}
+  <div class="small">No Polymarket trades logged yet. (In dry-run, a “trade” is still logged.)</div>
+{% else %}
+  <table>
+    <thead>
+      <tr>
+        <th class="nowrap">When (Local)</th>
+        <th>Mode</th>
+        <th class="nowrap">Dir</th>
+        <th class="nowrap right">USDC</th>
+        <th>Result</th>
+        <th class="nowrap">Window</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in trades %}
+        <tr>
+          {% set ts_iso = (t.get('ts_iso','') or '') %}
+          {% set ts_utc = (ts_iso|replace('T',' ')|replace('+00:00','Z')) %}
+          <td class="nowrap">
+            <time class="mono js-localtime" data-utc-ts="{{ ts_iso }}" title="UTC: {{ ts_utc }}">
+              {{ ts_utc }}
+            </time>
+          </td>
+          <td class="nowrap">
+            {% if t.get('dry_run') %}
+              <span class="tag warn">dry</span>
+            {% else %}
+              <span class="tag live">live</span>
+            {% endif %}
+          </td>
+          <td class="mono {% if (t.get('direction','')|upper) == 'UP' %}up{% else %}down{% endif %}">{{ (t.get('direction') or '') }}</td>
+          <td class="right mono">${{ '%.2f'|format(t.get('usdc', 0)) }}</td>
+          <td class="mono nowrap">
+            {% if t.get('early_exit') %}
+              {% if t.get('early_exit_trigger') == 'take_profit' %}
+                <span class="up">W</span>
+                <span class="tag live tag-sm" title="Early exit — take profit">TP exit</span>
+                {% if t.get('early_exit_pnl_pct') is not none %}<span class="mono up">+{{ '%.1f'|format(t.get('early_exit_pnl_pct')) }}%</span>{% endif %}
+              {% else %}
+                <span class="down">L</span>
+                <span class="tag warn tag-sm" title="Early exit — stop loss">SL exit</span>
+                {% if t.get('early_exit_pnl_pct') is not none %}<span class="mono down">{{ '%.1f'|format(t.get('early_exit_pnl_pct')) }}%</span>{% endif %}
+              {% endif %}
+            {% elif t.get('resolved') == 'win' %}
+              <span class="up">W</span>
+              {% if t.get('redeem_status') == 'success' %}
+                <span class="tag live tag-sm">redeemed</span>
+                {% set rp = t.get('redeem_profit_usdc') %}
+                {% if rp is not none %}
+                  {% if rp >= 0 %}
+                    <span class="mono up">+${{ '%.2f'|format(rp) }}</span>
+                  {% else %}
+                    <span class="mono down">-${{ '%.2f'|format((-1.0 * rp)) }}</span>
+                  {% endif %}
+                {% endif %}
+              {% elif t.get('redeem_status') == 'submitted' %}
+                <span class="tag warn tag-sm">redeeming</span>
+              {% elif t.get('redeem_status') == 'failed' %}
+                <span class="tag warn tag-sm">redeem failed</span>
+              {% endif %}
+            {% elif t.get('resolved') == 'loss' %}
+              <span class="down">L</span>
+            {% elif t.get('resolved') == 'win_unfilled' %}
+              <span class="muted">W</span>
+              <span class="tag muted tag-sm" title="Order canceled before fill — no position held" style="opacity:0.5;border-color:var(--border)">unfilled</span>
+            {% elif t.get('resolved') == 'loss_unfilled' %}
+              <span class="muted">L</span>
+              <span class="tag muted tag-sm" title="Order canceled before fill — no position held" style="opacity:0.5;border-color:var(--border)">unfilled</span>
+            {% else %}
+              <span class="muted">…</span>
+            {% endif %}
+          </td>
+          <td class="clip mono font-11">{{ t.get('window_slug') or t.get('question') or t.get('market') or '' }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="small mt-12">
+    Showing the last {{ trades|length }} trades. W = win, L = loss, unfilled = order canceled (no position), … = pending.
+  </div>
+{% endif %}
